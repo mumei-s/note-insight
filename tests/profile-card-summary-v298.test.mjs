@@ -5,124 +5,141 @@ import {JSDOM} from 'jsdom';
 import {contentRuntime} from '../scripts/profile-card-content-v292.mjs';
 import {runtime,dependencies} from './fixtures/profile-card-quality-runtime.mjs';
 
-function helper(){
- const dom=new JSDOM(''),page={};
- vm.runInNewContext(contentRuntime,{window:page,document:dom.window.document,DOMParser:dom.window.DOMParser,localStorage:{getItem:()=>null,setItem(){}}});
- return{api:page.__MUMEI_PROFILE_CARD_CONTENT__,close:()=>dom.window.close()};
-}
+const pref='mumei_profile_card_presentation_v292';
+const freeBody='<p>週末の記録を書きます。</p><h2>観察の方法</h2><p>葉物野菜の保存で、容器を密閉する方法を試しました。</p><h2>保存後の比較</h2><p>冷蔵庫で3日後に確認すると、湿らせた紙で包んだ葉物野菜は乾燥しませんでした。</p>';
 const row={urlname:'summary_creator',key:'n000000000001',url:'https://note.com/summary_creator/n/n000000000001',creator:'作者'};
-// Mirrors the public v3 response observed for the reported ioRe article:
-// a zero price and no access restriction, alongside a true UI feature flag.
-const note={key:row.key,user:{urlname:row.urlname},note_url:row.url,price:0,is_limited:false,separator:'',description:'',body:'<p>公開された本文を読み取ります。</p><p>紹介文として使う段落です。</p>',paywall:{is_simple_paid_note:true,is_simple_paid_note_test_a:false,context:{is_show_limited_pay_note_paywall:false,is_membership_connected:false}}};
+const note={name:'葉物野菜の保存',key:row.key,user:{urlname:row.urlname},note_url:row.url,price:0,is_limited:false,body:freeBody,paywall:{is_simple_paid_note:true,context:{is_membership_connected:false}}};
+const profile={urlname:row.urlname,profile:'園芸や家庭菜園を発信しています。'};
 
-test('v3 paywall display flag does not hide a free unrestricted article',()=>{
- const h=helper(),value=h.api.compose(row,note,{},{content:'summary',size:'medium'});
- assert.equal(value.status,'available');assert.equal(value.text,'公開された本文を読み取ります。\n紹介文として使う段落です。');
- assert.equal(value.source.field,'free-article-body');assert.equal(value.source.account,row.urlname);assert.equal(value.source.key,row.key);h.close();
+function helper(){
+ const dom=new JSDOM('<div id="panel"><div class="body"><div class="amount"></div></div></div>',{url:'https://editor.note.com'});
+ const page={},document=dom.window.document,localStorage=dom.window.localStorage;
+ vm.runInNewContext(contentRuntime,{window:page,document,DOMParser:dom.window.DOMParser,localStorage});
+ return {api:page.__MUMEI_PROFILE_CARD_CONTENT__,dom,document,localStorage};
+}
+
+test('the menu lists name, profile, opening and summary in order and saves the heading choice',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ h.api.mount(h.document.getElementById('panel'));
+ const select=h.document.querySelector('[data-presentation-content]'),checkbox=h.document.querySelector('[data-presentation-ranges]');
+ assert.deepEqual(Array.from(select.options,option=>option.textContent),['名前だけ','プロフィール','読み始め','要約']);
+ assert.equal(checkbox.checked,false);
+ select.value='lead';select.dispatchEvent(new h.dom.window.Event('change',{bubbles:true}));
+ checkbox.click();
+ assert.deepEqual(JSON.parse(h.localStorage.getItem(pref)),{size:'thin',content:'lead',showCreatorRanges:true});
 });
-test('price and real access restrictions still prevent using an unbounded body',()=>{
- const h=helper();
- for(const override of [{price:980},{price:980,paywall:{is_simple_paid_note:false}},{price:null},{price:undefined},{price:0,is_limited:true},{price:0,isLimited:true},{price:0,is_membership_only:true},{price:0,isMembershipOnly:true},{price:0,paywall:{context:{is_membership_connected:true}}}]){
-  assert.equal(h.api.compose(row,{...note,...override},{},{content:'summary'}).status,'unavailable',JSON.stringify(override));
+
+test('a summary explains the method and later result in the public body without using the opening',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ const summary=h.api.compose(row,note,profile,{content:'summary',size:'medium'});
+ assert.equal(summary.display,'summary');
+ assert.equal(h.api.label(summary),'記事の要約');
+ assert.match(summary.text,/容器を密閉する方法/);
+ assert.match(summary.text,/3日後.*乾燥しなかった/);
+ assert.doesNotMatch(summary.text,/週末の記録|抜粋/);
+ assert.equal(summary.source.account,row.urlname);
+ assert.equal(summary.source.key,row.key);
+ assert.equal(summary.source.field,'free-article-body');
+ const opening=h.api.compose(row,note,profile,{content:'lead'});
+ assert.equal(opening.display,'lead');
+ assert.match(opening.text,/^週末の記録/);
+ assert.equal(h.api.label(opening),'読み始め');
+});
+
+test('reading mode and fallback preserve the requested mode, and missing profiles display just the name',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ for(const content of ['lead','summary']){
+  const requested={content},opening=h.api.compose(row,{...note,body:'',description:'公開ページの読み始めです。'},profile,requested);
+  assert.equal(opening.content,content);
+  assert.equal(opening.display,'lead');
+  assert.equal(opening.text,'公開ページの読み始めです。');
+  const fallback=h.api.compose(row,{},profile,requested);
+  assert.equal(fallback.display,'profile');
+  assert.equal(fallback.source.kind,'profile');
+  const missing=h.api.compose(row,{...note,price:500,description:''},{},requested);
+  assert.equal(missing.display,'name');
+  assert.equal(h.api.aboveText({...row,presentation:missing}),'');
  }
- h.close();
+ assert.equal(h.api.compose(row,note,profile,{content:'profile'}).text,profile.profile);
+ assert.equal(h.api.compose(row,note,{}, {content:'profile'}).display,'name');
+ assert.equal(h.api.compose(row,note,profile,{content:'name'}).display,'name');
 });
-test('paid article uses only content before its verified separator',()=>{
- const h=helper(),value=h.api.compose(row,{...note,price:980,separator:'paid',body:'<p>無料で読める部分です。</p><p id="paid">購入者だけの本文です。</p>'},{},{content:'summary'});
- assert.equal(value.status,'available');assert.equal(value.text,'無料で読める部分です。');assert.equal(value.source.field,'body-before-separator');h.close();
+
+test('a public lead is not promoted to summary, and paid or membership bodies respect the free boundary',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ for(const restriction of [{price:980},{price:null},{price:undefined},{is_limited:true},{isLimited:true},{is_membership_only:true},{isMembershipOnly:true},{is_trial:true},{can_read:false},{paywall:{context:{is_membership_connected:true}}}]){
+  const value=h.api.compose(row,{...note,...restriction},profile,{content:'summary'});
+  assert.equal(value.display,'profile',JSON.stringify(restriction));
+ }
+ const paid={...note,price:980,separator:'paid',body:freeBody+'<p id="paid">購入者だけの秘密の本文です。</p>'};
+ const partial=h.api.compose(row,paid,profile,{content:'summary',size:'medium'});
+ assert.equal(partial.display,'summary');
+ assert.equal(h.api.label(partial),'公開部分の要約');
+ assert.doesNotMatch(partial.text,/購入者だけの秘密/);
+ const lead=h.api.compose(row,{...note,price:980,description:freeBody},profile,{content:'summary'});
+ assert.equal(lead.display,'lead');
 });
-test('public lead remains available when the full-body boundary is unknown',()=>{
- const h=helper(),value=h.api.compose(row,{...note,price:980,description:'著者が公開している記事の説明。'},{},{content:'summary'});
- assert.equal(value.status,'available');assert.equal(value.source.field,'description');h.close();
+
+test('generated creator cards, embedded formulas and generic opening text do not become summary points',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ const extended=freeBody+'<p>$$\u005ctext{プロフィールにある独自の語句です。}$$</p><figure>埋め込みカードの独自の語句です。</figure><h2>【スキをありがとう】</h2><p>埋め込みプロフィールの独自の語句を何回も表示しました。</p>';
+ const value=h.api.compose(row,{...note,body:extended},profile,{content:'summary',size:'medium'});
+ assert.equal(value.display,'summary');
+ assert.doesNotMatch(value.text,/独自の語句|週末の記録/);
+ assert.equal(h.api.compose(row,{...note,body:'<p>この一文から始まります。</p>'},profile,{content:'summary'}).display,'lead');
 });
 
 const compiled=(name,fn)=>test(name,{skip:!dependencies?'PM and canvas are required':false},fn);
-for(const flow of ['normal','history'])for(const size of ['thin','medium'])compiled(flow+' '+size+' generates real summaries when the UI flag is true',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size,content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap,requestMutator:(url,payload)=>{
-  if(/\/api\/v3\/notes\/n[a-f0-9]+$/.test(new URL(url).pathname))Object.assign(payload.data,{price:0,is_limited:false,body:note.body,paywall:note.paywall});return payload;
+for(const flow of ['normal','history'])for(const size of ['thin','medium'])compiled(flow+' '+size+' uses all three fallbacks and keeps each selected image link',async t=>{
+ const localStorageMap=new Map([[pref,JSON.stringify({size,content:'summary'})]]);
+ const r=await runtime({count:4,localStorageMap,requestMutator:(url,payload)=>{
+  const path=new URL(url).pathname;
+  if(path.endsWith('/notes/n000000000001'))Object.assign(payload.data,{name:note.name,body:freeBody,paywall:note.paywall});
+  if(path.endsWith('/notes/n000000000002'))Object.assign(payload.data,{body:'',description:'冒頭の紹介です。'});
+  if(/\/notes\/n00000000000[34]$/.test(path))Object.assign(payload.data,{body:'',description:''});
+  if(path.endsWith('/creators/quality_person_3'))payload.data.creator.profile='';
+  return payload;
  }});
- try{
-  const run=await r[flow]();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(r.state.images.length,3);
-  assert.ok(run.rows.every(person=>person.presentation.status==='available'&&person.presentation.text.includes('公開された本文')));
-  assert.ok(!JSON.stringify(run).includes('無料公開本文を取得できません'));assert.ok(!r.view.state.doc.textContent.includes('無料公開本文を取得できません'));
-  assert.ok(r.state.imageDimensions.every(image=>image.height===(size==='medium'?360:140)));
- }finally{r.close();}
+ t.after(()=>r.close());
+ if(flow==='history')r.editor.patch(`const originalGet=xhrJSON;xhrJSON=url=>url.endsWith('/creators/quality_person_3')?Promise.reject(new Error('プロフィール取得失敗')):originalGet(url);`);
+ const run=await r[flow]();
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.deepEqual(Array.from(run.rows.slice(0,4),item=>item.presentation.display),['summary','lead','profile','name']);
+ assert.deepEqual(Array.from(run.rows.slice(0,4),item=>item.key),['n000000000001','n000000000002','n000000000003','n000000000004']);
+ assert.equal(run.items.length,5);
+ assert.deepEqual(Array.from(run.items,item=>item.url),Array.from(run.rows,item=>item.url));
+ assert.ok(r.state.imageDimensions.every(image=>image.height===(size==='medium'?360:140)));
+ assert.doesNotMatch(r.view.state.doc.textContent,/抜粋|無料公開本文を取得できません|人目/);
+ await r.core.createCardsAtTap();
+ assert.equal(r.editor.readRun().stage,'complete',r.state.statuses.at(-1)?.text);
+ assert.deepEqual(r.state.cards,Array.from(run.rows,item=>item.url));
 });
 
-function alternateFixture({unavailable=new Set([0]),noAlternative=new Set(),outsideScope=false}={}){
- const alternatives=new Map();
- return(url,payload)=>{
-  const path=new URL(url).pathname,creator=path.match(/\/creators\/(quality_person_(\d+))\/contents$/),detail=path.match(/\/notes\/(n[a-f0-9]{12})$/);
-  if(creator&&unavailable.has(Number(creator[2]))&&!noAlternative.has(Number(creator[2]))){
-   const original=payload.data.contents[0];if(original){
-    const number=Number(creator[2]),key='n'+(0x100000+number).toString(16).padStart(12,'0');
-    const value={...original,key,noteUrl:'https://note.com/'+creator[1]+'/n/'+key,name:'切り替えた別の記事 '+number,body:'<p>別の記事の無料公開部分です。</p>',price:0,eyecatch_url:'https://assets.st-note.com/alternate'+number+'.png',eyecatch:{url:'https://assets.st-note.com/alternate'+number+'.png'},paywall:note.paywall};
-    if(outsideScope)value.hashtags=['別のタグ'];alternatives.set(key,value);payload.data.contents.push(value);
-   }
-  }
-  if(detail){
-   if(alternatives.has(detail[1]))payload.data={...alternatives.get(detail[1])};
-   else{const index=parseInt(detail[1].slice(1),16)-1;if(unavailable.has(index))Object.assign(payload.data,{body:'',description:'',price:0});}
-  }
-  return payload;
- };
-}
-for(const flow of ['normal','history'])for(const size of ['thin','medium'])compiled(flow+' '+size+' switches the summary, cover and link to the same alternate article',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size,content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap,requestMutator:alternateFixture()});
- try{
-  const run=await r[flow]();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(run.items.length,3);
-  const first=run.rows[0];assert.equal(first.urlname,'quality_person_0');assert.equal(first.key,'n000000100000');
-  assert.equal(first.presentation.status,'available');assert.equal(first.presentation.text,'別の記事の無料公開部分です。');assert.equal(first.presentation.source.key,first.key);
-  assert.equal(first.thumbUrl,'https://assets.st-note.com/alternate0.png');assert.equal(first.title,'切り替えた別の記事 0');assert.equal(first.summaryFallback.fromKey,'n000000000001');assert.ok(!run.qualityHold);
-  const images=[];r.view.state.doc.descendants(node=>{if(node.type.name==='image')images.push(node)});assert.equal(images[0].attrs.link,first.url);
-  if(flow==='normal'){await r.core.createCardsAtTap();assert.equal(r.state.cards[0],first.url);}else{assert.equal(r.quality.assessIdentity(first).some(value=>value.status==='mismatch'),false);}
- }finally{r.close();}
+for(const flow of ['normal','history'])compiled(flow+' writes creator ranges only when enabled and retains them on resume',async t=>{
+ const localStorageMap=new Map([[pref,JSON.stringify({showCreatorRanges:true})]]);
+ const r=await runtime({count:2,localStorageMap});t.after(()=>r.close());
+ r.state.failAt=2;await r[flow]();
+ assert.equal(r.editor.readRun().showCreatorRanges,true);
+ localStorageMap.set(pref,JSON.stringify({showCreatorRanges:false}));
+ r.state.failAt=0;
+ if(flow==='normal')await r.core.pasteSavedSpecial();
+ else await r.editor.createFixed300();
+ const run=r.editor.readRun();
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.equal(run.showCreatorRanges,true);
+ assert.equal(run.sectionHeadings.filter(heading=>/人目/.test(heading)).length,1);
 });
-for(const flow of ['normal','history'])compiled(flow+' skips creators with no readable article and keeps running',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'medium',content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap,requestMutator:alternateFixture({noAlternative:new Set([0])})});
- try{
-  const run=await r[flow]();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
-  assert.ok(run.rows.every(row=>row.urlname!=='quality_person_0'));assert.equal(run.rows.at(-1).finalMarker,true);
-  assert.ok(run.rows.every(row=>row.presentation.status==='available'));assert.equal(r.state.images.length,flow==='history'?3:2);
- }finally{r.close();}
-});
-for(const flow of ['normal','history'])compiled(flow+' still finishes when every creator lacks a summary',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'medium',content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap,requestMutator:(url,payload)=>{
-  if(/\/api\/v3\/notes\/n[a-f0-9]+$/.test(new URL(url).pathname))Object.assign(payload.data,{body:'',description:'',price:0});return payload;
- }});
- try{
-  const run=await r[flow]();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(r.state.images.length,1);
-  assert.equal(run.rows.length,1);assert.equal(run.rows[0].finalMarker,true);assert.equal(run.rows[0].presentation.content,'name');
- }finally{r.close();}
-});
-compiled('fallback keeps the selected hashtag instead of using an unrelated article',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'thin',content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap,requestMutator:alternateFixture({outsideScope:true})});
- try{const run=await r.normal();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.ok(run.rows.every(person=>person.urlname!=='quality_person_0'));assert.ok(!run.qualityHold);}finally{r.close();}
-});
-compiled('resume refreshes only missing pending summaries and retains the completed image',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'medium',content:'summary'})]]);
- const r=await runtime({count:3,localStorageMap});
- try{
-  r.state.pauseAt=1;await r.history();const paused=r.editor.readRun();assert.equal(paused.items.length,1);
-  const first=r.state.images[0].png;r.editor.writeRun({...paused,rows:paused.rows.map((row,index)=>index===1?{...row,presentation:{...row.presentation,status:'unavailable',text:'無料公開本文を取得できません'}}:row)});
-  r.state.requestMutator=alternateFixture({unavailable:new Set([1])});r.state.pauseAt=0;
-  const run=await r.history();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(run.items.length,4);assert.equal(r.state.images.length,4);assert.equal(r.state.images[0].png,first);
-  assert.equal(run.rows[1].summaryFallback.fromKey,'n000000000002');assert.equal(run.rows[1].presentation.status,'available');
- }finally{r.close();}
-});
-compiled('restart refreshes cached unavailable summaries before replacing old generated images',async()=>{
- const localStorageMap=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'medium',content:'summary'})]]);
- const r=await runtime({count:2,localStorageMap});
- try{
-  const previous=await r.history();r.editor.writeRun({...previous,version:'2.9.7',rows:previous.rows.map(row=>({...row,presentation:{...row.presentation,status:'unavailable',text:'無料公開本文を取得できません'}}))});
-  r.state.requestMutator=(url,payload)=>{if(/\/api\/v3\/notes\/n[a-f0-9]+$/.test(new URL(url).pathname))Object.assign(payload.data,{price:0,body:note.body,paywall:note.paywall});return payload;};
-  r.editor.patch("const beforeSummaryHistoryOptions=historyOptions;historyOptions=run=>run?beforeSummaryHistoryOptions(run):{mode:'number',count:state.targetCount,target:state.targetCount};globalThis.restartSummaryHistory=restartFixed300;");
-  await r.c.restartSummaryHistory();const run=r.editor.readRun();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.ok(run.rows.every(row=>row.presentation.status==='available'&&row.presentation.text.includes('公開された本文')));
-  assert.equal(run.items.length,3);const images=[];r.view.state.doc.descendants(node=>{if(node.type.name==='image')images.push(node)});assert.equal(images.length,3);
- }finally{r.close();}
+
+compiled('history start-over applies the newly selected mode and heading preference',async t=>{
+ const localStorageMap=new Map([[pref,JSON.stringify({content:'profile',showCreatorRanges:true})]]);
+ const r=await runtime({count:2,localStorageMap});t.after(()=>r.close());
+ await r.history();r.state.clock+=10;
+ localStorageMap.set(pref,JSON.stringify({content:'lead',showCreatorRanges:false}));
+ r.editor.patch('const testHistoryOptions=historyOptions;historyOptions=run=>testHistoryOptions(run||readRun());');
+ await r.editor.patch('restartFixed300()');
+ const run=r.editor.readRun();
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.equal(run.showCreatorRanges,false);
+ assert.equal(run.rows[0].presentation.display,'lead');
+ assert.doesNotMatch(r.view.state.doc.textContent,/人目/);
 });

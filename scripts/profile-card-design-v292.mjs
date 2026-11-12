@@ -1,5 +1,9 @@
 // Presentation-only adapters for the self-contained distribution. Historical
 // source modules remain available to the separate purchased-article installer.
+import {readFileSync} from 'node:fs';
+
+const artwork=readFileSync(new URL('./profile-card-artwork.js',import.meta.url),'utf8');
+
 function once(source,from,to){
  if(source.split(from).length!==2)throw Error('Design adapter no longer matches exactly once: '+from.slice(0,100));
  return source.replace(from,()=>to);
@@ -138,7 +142,7 @@ function drawMediumThinCard(row,avatar,thumb,theme){
  const originalContext=canvas.getContext('2d'),ctx=typeof qualityCall==='function'?qualityCall('observeContext',[originalContext,row,canvas.width,canvas.height],originalContext):originalContext;
  ctx.fillStyle=theme.bg;ctx.fillRect(0,0,canvas.width,canvas.height);
  drawDistinctThinDecor(ctx,row,theme,1);
- const content=row.presentation?.content||'name',nameOnly=content==='name',ix=20,iy=65,iw=410,ih=230,ax=nameOnly?644:478,ay=nameOnly?105:42,ar=nameOnly?34:20,tx=454,tw=382;
+ const content=row.presentation?.display||row.presentation?.content||'name',nameOnly=content==='name',ix=20,iy=65,iw=410,ih=230,ax=nameOnly?644:478,ay=nameOnly?105:42,ar=nameOnly?34:20,tx=454,tw=382;
  ctx.fillStyle=theme.panel;rounded(ctx,ix,iy,iw,ih,10);ctx.fill();
  if(thumb){
   const sw=thumb.width||thumb.naturalWidth||1,sh=thumb.height||thumb.naturalHeight||1,scale=Math.max(iw/sw,ih/sh),dw=sw*scale,dh=sh*scale;
@@ -165,12 +169,13 @@ function drawMediumThinCard(row,avatar,thumb,theme){
   finishThinContrast(canvas,row,{avatar:[ax,ay,ar],thumb:[ix,iy,iw,ih],shape:'circle',radius:10},theme);
   return canvas;
  }
- const sourceText=String(row.presentation?.text||''),bodyTop=Math.max(78,23+nameLines.length*28+14),label=content==='profile'?'プロフィール（抜粋）':'記事紹介（無料部分の抜粋）';
+ const sourceText=String(row.presentation?.text||''),bodyTop=Math.max(78,23+nameLines.length*28+14);
+ const label=row.presentation?.version===2?contentApi.label(row.presentation):content==='profile'?'プロフィール':'読み始め';
  ctx.fillStyle=theme.bg;rounded(ctx,tx-4,bodyTop-4,tw+8,340-bodyTop,6);ctx.fill();
  ctx.fillStyle=theme.muted;ctx.font='700 15px system-ui,-apple-system,sans-serif';ctx.fillText(label,tx,bodyTop);
  ctx.fillStyle=theme.ink;ctx.font='500 20px system-ui,-apple-system,sans-serif';
  const textTop=bodyTop+25,lineHeight=28,maxLines=Math.max(1,Math.floor((333-textTop)/lineHeight)),allLines=mediumTextLines(ctx,sourceText,tw),truncated=allLines.length>maxLines,bodyLines=allLines.slice(0,maxLines);
- if(truncated&&bodyLines.length){let parts=mediumTextParts(bodyLines.at(-1));const suffix='…（抜粋）';while(parts.length&&ctx.measureText(parts.join('')+suffix).width>tw)parts.pop();bodyLines[bodyLines.length-1]=parts.join('')+suffix}
+ if(truncated&&bodyLines.length){let parts=mediumTextParts(bodyLines.at(-1));const suffix='…';while(parts.length&&ctx.measureText(parts.join('')+suffix).width>tw)parts.pop();bodyLines[bodyLines.length-1]=parts.join('')+suffix}
  bodyLines.forEach((line,index)=>ctx.fillText(line,tx,textTop+index*lineHeight));
  row.presentationRender={width:W,height:360,fontSize:20,content,excerpt:truncated||content!=='name',nameTruncated,sourceLength:mediumTextParts(sourceText).length};
  finishThinContrast(canvas,row,{avatar:[ax,ay,ar],thumb:[ix,iy,iw,ih],shape:'circle',radius:10},theme);
@@ -184,14 +189,15 @@ function finishThinPresentation(canvas,row,avatar,thumb,theme,layout){
 
 export function transformCoreDesign(source){
  source=once(source,' return themes[designHash(row?.key||row?.url||row?.creator)%themes.length]',' return themes[thinDesignOrdinal(row)%themes.length]');
- source=once(source,'function randomThinTheme(row){',helpers+'\nfunction randomThinTheme(row){');
+ source=once(source,'function randomThinTheme(row){',helpers+artwork+'\nfunction randomThinTheme(row){');
  source=once(source,' drawThinDecor(ctx,theme);',' drawThinDecor(ctx,theme);\n drawDistinctThinDecor(ctx,row,theme,50);');
  source=once(source,' if(row.activityLabel){'," if(row.presentation){drawThinNameOnly(ctx,row,theme,{text:[tx,18,tw]})}\n else if(row.activityLabel){");
- return once(source," try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}\n const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));"," const outputCanvas=finishThinPresentation(c,row,avatar,thumb,theme,{avatar:[ax,ay,ar],thumb:[ix,iy,iw,ih],shape:'circle'});\n try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}\n const blob=await new Promise((resolve,reject)=>outputCanvas.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));");
+ source=once(source," const c=document.createElement('canvas');c.width=W;c.height=H;const ctx="," const c=document.createElement('canvas');\n let outputCanvas=c;\n if(usesReadingArtwork(row))drawReadingArtwork(c,row,avatar,thumb);\n else{\n c.width=W;c.height=H;const ctx=");
+ return once(source," try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}\n const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));"," outputCanvas=finishThinPresentation(c,row,avatar,thumb,theme,{avatar:[ax,ay,ar],thumb:[ix,iy,iw,ih],shape:'circle'});\n }\n try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}\n const blob=await new Promise((resolve,reject)=>outputCanvas.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));");
 }
 
 export function transformEditorDesign(source){
- source=once(source,'const HISTORY_DESIGN_COUNT=200;',helpers+'\nconst HISTORY_DESIGN_COUNT=200;');
+ source=once(source,'const HISTORY_DESIGN_COUNT=200;',helpers+artwork+'\nconst HISTORY_DESIGN_COUNT=200;');
  const start=source.indexOf(' const valid=rows.every((row,i)=>Number.isInteger(row.designIndex)'),end=source.indexOf('\nconst palettes=[',start);
  if(start<0||end<0)throw Error('Missing history design allocation markers');
  source=source.slice(0,start)+String.raw` // Retain every saved choice. New rows receive an unused index, including
@@ -230,6 +236,7 @@ export function transformEditorDesign(source){
  // History layouts are indexed modulo 200, but the extended index is retained
  // on the row for future resume and non-repeating allocation.
  source=once(source,' if(row.gallery126===true){drawGalleryCard(ctx,index,row,avatar,thumb)}else if(index>=50){drawHistoryCard(ctx,index,row,avatar,thumb)}else{',' if(row.gallery126===true){drawGalleryCard(ctx,index,row,avatar,thumb)}else if(index%HISTORY_DESIGN_COUNT>=50){drawHistoryCard(ctx,index,row,avatar,thumb)}else{');
- source=once(source,' try{avatar?.close?.()}catch{}\n try{if(thumb!==avatar)thumb?.close?.()}catch{}'," const contrastLayout=row.gallery126===true?{...galleryDesign(index).layout,profileOnly}:index%HISTORY_DESIGN_COUNT>=50?historyDesign(index).layout:{avatar:[50,70,34],thumb:[590,8,262,124],shape:'circle'};\n const outputCanvas=finishThinPresentation(canvas,row,avatar,thumb,theme,contrastLayout);\n try{avatar?.close?.()}catch{}\n try{if(thumb!==avatar)thumb?.close?.()}catch{}");
+ source=once(source," const canvas=document.createElement('canvas');\n canvas.width=W;canvas.height=H;", " const canvas=document.createElement('canvas');\n let outputCanvas=canvas;\n if(usesReadingArtwork(row))drawReadingArtwork(canvas,row,avatar,thumb);\n else{\n canvas.width=W;canvas.height=H;");
+ source=once(source,' try{avatar?.close?.()}catch{}\n try{if(thumb!==avatar)thumb?.close?.()}catch{}'," const contrastLayout=row.gallery126===true?{...galleryDesign(index).layout,profileOnly}:index%HISTORY_DESIGN_COUNT>=50?historyDesign(index).layout:{avatar:[50,70,34],thumb:[590,8,262,124],shape:'circle'};\n outputCanvas=finishThinPresentation(canvas,row,avatar,thumb,theme,contrastLayout);\n }\n try{avatar?.close?.()}catch{}\n try{if(thumb!==avatar)thumb?.close?.()}catch{}");
  return once(source,"=>canvas.toBlob(value=>value?resolve(value):reject(new Error('画像生成失敗')),'image/png',1)","=>outputCanvas.toBlob(value=>value?resolve(value):reject(new Error('画像生成失敗')),'image/png',1)");
 }

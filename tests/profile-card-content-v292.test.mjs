@@ -24,16 +24,16 @@ test('paid body is cut before the independent paywall marker even when authentic
 });
 test('unknown or missing paid boundary is not treated as a free article, and a title is not a summary',()=>{
  const h=helper();for(const note of [{...source,body:'非公開かも知れない本文。'},{...source,price:100,separator:'missing',body:'有料本文。'},{...source,price:0,is_limited:true,body:'限定本文。'}]){
-  const value=h.api.compose(row,note,{},{content:'summary'});assert.equal(value.status,'unavailable');assert.equal(value.text,'無料公開本文を取得できません');
+  const value=h.api.compose(row,note,{},{content:'summary'});assert.equal(value.display,'name');assert.equal(value.text,'');
  }h.dom.window.close();
 });
 test('explicit free body and public publisher lead are allowed independently of paid access',()=>{
  const h=helper(),free=h.api.compose(row,{...source,price:100,free_body:'無料本文。',body:'有料本文。'},{},{content:'summary'}),lead=h.api.compose(row,{...source,price:100,description:'公開された冒頭の説明。',body:'有料本文。'},{},{content:'summary'});
  assert.equal(free.text,'無料本文。');assert.equal(lead.text,'公開された冒頭の説明。');assert.equal(lead.source.kind,'note-public-lead');assert.equal(lead.source.field,'description');h.dom.window.close();
 });
-test('profile source identity is independent, long visible copy is labelled excerpt and original stays intact',()=>{
+test('profile source identity is independent, long visible copy is shortened and original stays intact',()=>{
  const h=helper(),original='手動の改行。\n'+('長いプロフィールです。'.repeat(40)),profile={urlname:'different_account',profile:original};
- const value=h.api.compose(row,source,profile,{content:'profile',size:'thin'});assert.equal(value.source.account,'different_account');assert.equal(profile.profile,original);assert.equal(value.truncated,true);assert.ok(value.text.endsWith('…（抜粋）'));assert.ok(Array.from(value.text).length<=118);h.dom.window.close();
+ const value=h.api.compose(row,source,profile,{content:'profile',size:'thin'});assert.equal(value.source.account,'different_account');assert.equal(profile.profile,original);assert.equal(value.truncated,true);assert.ok(value.text.endsWith('…'));assert.ok(!value.text.includes('抜粋'));assert.ok(Array.from(value.text).length<=108);h.dom.window.close();
 });
 test('missing sources remain unverified instead of copying target identifiers into evidence',()=>{
  const h=helper(),profile=h.api.compose(row,source,{profile:'内容あり'},{content:'profile'}),summary=h.api.compose(row,{price:0,body:'内容あり'},{},{content:'summary'});

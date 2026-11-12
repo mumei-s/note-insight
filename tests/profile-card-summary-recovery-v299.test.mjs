@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {runtime,dependencies} from './fixtures/profile-card-quality-runtime.mjs';
 
 const compiled=(name,fn)=>test(name,{skip:!dependencies?'PM and canvas are required':false},fn);
-const unavailable=row=>({...row,presentation:{...row.presentation,status:'unavailable',text:'無料公開本文を取得できません'}});
+const unavailable=row=>({...row,presentation:{version:1,size:row.presentation.size,content:'summary',source:row.presentation.source,status:'unavailable',text:'無料公開本文を取得できません'}});
 const imageNodes=r=>{const nodes=[];r.view.state.doc.descendants(node=>{if(node.type.name==='image')nodes.push(node)});return nodes};
 const cardNodes=r=>{const nodes=[];r.view.state.doc.descendants(node=>{if(node.type.name==='embed')nodes.push(node)});return nodes};
 const resume=async(r,flow)=>{await(flow==='normal'?r.core.pasteSavedSpecial():r.editor.createFixed300());return r.editor.readRun()};
@@ -45,32 +45,34 @@ for(const flow of ['normal','history'])compiled(flow+' retains the successful pr
  }finally{r.close()}
 });
 
-function fallback({none=false}={}){
+function fallback({lead=false}={}){
  let alternate;
  return(url,payload)=>{
   const path=new URL(url).pathname;
-  if(path.endsWith('/creators/quality_person_1/contents')&&!none){
+  if(path.endsWith('/creators/quality_person_1/contents')){
    alternate={...payload.data.contents[0],key:'n000000100001',noteUrl:'https://note.com/quality_person_1/n/n000000100001',name:'別の記事',price:0,body:'<p>別の記事の無料本文です。</p>',eyecatch_url:'https://assets.st-note.com/alternate.png',eyecatch:{url:'https://assets.st-note.com/alternate.png'}};
    payload.data.contents.push(alternate);
   }
-  if(path.endsWith('/notes/n000000000002'))Object.assign(payload.data,{body:'',description:'',price:0});
+  if(path.endsWith('/notes/n000000000002'))Object.assign(payload.data,{body:'',description:lead?'元の記事の読み始めです。':'',price:0});
   if(path.endsWith('/notes/n000000100001'))payload.data={...alternate};
   return payload;
  };
 }
-for(const flow of ['normal','history'])for(const none of [false,true])compiled(flow+' repairs completed unavailable article by '+(none?'skipping':'switching')+' and keeps cards consistent',async()=>{
+for(const flow of ['normal','history'])for(const lead of [false,true])compiled(flow+' repairs a completed introduction with '+(lead?'the reading start':'the profile')+' and retains the selected article',async()=>{
  const r=await runtime({count:3,localStorageMap:new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'medium',content:'summary'})]])});
  try{
   await r[flow]();await r.core.createCardsAtTap();
   const previous=r.editor.readRun();
   r.editor.writeRun({...previous,rows:previous.rows.map((row,index)=>index===1?unavailable(row):row)});
-  r.state.requestMutator=fallback({none});
+  r.state.requestMutator=fallback({lead});
   const run=await resume(r,flow);
   assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
   assert.ok(run.rows.every(row=>row.presentation.status==='available'));
-  assert.equal(run.rows.length,none?3:4);assert.equal(imageNodes(r).length,run.rows.length);
-  if(none)assert.ok(run.rows.every(row=>row.urlname!=='quality_person_1'));
-  else{assert.equal(run.rows[1].key,'n000000100001');assert.equal(run.rows[1].thumbUrl,'https://assets.st-note.com/alternate.png');assert.equal(run.rows[1].presentation.text,'別の記事の無料本文です。')}
+  assert.equal(run.rows.length,4);assert.equal(imageNodes(r).length,4);
+  assert.equal(run.rows[1].key,previous.rows[1].key);
+  assert.equal(run.rows[1].thumbUrl,previous.rows[1].thumbUrl);
+  assert.equal(run.rows[1].presentation.display,lead?'lead':'profile');
+  assert.equal(run.rows[1].presentation.source.account,previous.rows[1].urlname);
   assert.deepEqual(imageNodes(r).map(node=>node.attrs.link),Array.from(run.rows,row=>row.url));
   await r.core.createCardsAtTap();
   assert.equal(r.editor.readRun().stage,'complete',r.state.statuses.at(-1)?.text);

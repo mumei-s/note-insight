@@ -2,7 +2,13 @@
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 const PREF='mumei_profile_card_presentation_v292';
-function options(value={}){return{size:value.size==='medium'?'medium':'thin',content:['profile','summary'].includes(value.content)?value.content:'name'}}
+function options(value={}){
+ return {
+  size:value.size==='medium'?'medium':'thin',
+  content:['profile','summary','lead'].includes(value.content)?value.content:'name',
+  showCreatorRanges:value.showCreatorRanges===true
+ };
+}
 function readOptions(){try{return options(JSON.parse(localStorage.getItem(PREF)||'{}'))}catch{return options()}}
 function account(value){return String(value?.urlname||value?.urlName||value?.url_name||value?.presentationAccount||'').trim().toLowerCase()}
 function clean(value){
@@ -12,36 +18,60 @@ function clean(value){
  return String(doc.body.textContent||'').replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ').replace(/\n[ \t]+/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 function excerpt(value,budget=220){
- const text=String(value||'').trim(),units=Array.from(text);if(units.length<=budget)return{text,truncated:false};
- const prefix=units.slice(0,budget-7).join('');
+ const text=String(value||'').trim(),units=graphemes(text);if(units.length<=budget)return{text,truncated:false};
+ const prefix=units.slice(0,budget-1).join('');
  const boundaries=[...prefix.matchAll(/[。！？.!?](?:[」』）)]|\s|$)?|\n/g)].map(match=>match.index+match[0].length);
  const end=boundaries.filter(index=>index>=Math.floor(budget*.5)).at(-1);
- return{text:prefix.slice(0,end||prefix.length).trim()+'…（抜粋）',truncated:true};
+ return{text:prefix.slice(0,end||prefix.length).trimEnd()+'…',truncated:true};
+}
+function readingBlocks(body){
+ const doc=new DOMParser().parseFromString(body.replace(/<br\s*\/?\s*>/gi,'\n').replace(/<\/(?:p|div|h[1-6]|li|ul|ol|section)>/gi,'\n$&'),'text/html');
+ doc.body.querySelectorAll('script,style,iframe,form,button,nav,figure,figcaption,blockquote,pre,table,[hidden]').forEach(node=>node.remove());
+ for(const heading of doc.body.querySelectorAll('h1,h2,h3,h4,h5,h6'))heading.prepend('\n\uFDD0');
+ return String(doc.body.textContent||'').split(/\r?\n/).flatMap(line=>{
+  const text=line.replace(/^[\s\uFDD0]+|\s+$/g,'').replace(/[\t\u00a0 ]+/g,' ');
+  if(!text||/\$\$|\\(?:begin|text|char|boxed|large|scriptsize|tiny)\b/u.test(text)||/^https?:\/\/\S+$/i.test(text)||/^(?:[#＃]\S+\s*)+$/u.test(text)||!/[\p{L}\p{N}]/u.test(text))return [];
+  const markdown=/^#{1,6}\s+/.test(text);
+  return [{text:markdown?text.replace(/^#{1,6}\s+/,''):text,heading:markdown||line.includes('\uFDD0')}];
+ });
+}
+function publicBody(body,field,partial=false){
+ const blocks=readingBlocks(body);
+ return {text:blocks.map(block=>block.text).join('\n'),blocks,field,kind:'note-free',partial};
 }
 function freeBody(note={}){
- const explicit=['free_body','freeBody','free_body_html','freeBodyHtml','free_body_text','freeBodyText','free_content','freeContent'];
- for(const field of explicit)if(typeof note[field]==='string'&&clean(note[field]))return{text:clean(note[field]),field,kind:'note-free'};
+ if(note.is_draft===true||note.is_published===false||note.is_published_preview_note===true)return {text:'',blocks:[]};
  const body=typeof note.body==='string'?note.body:typeof note.body_html==='string'?note.body_html:typeof note.body_text==='string'?note.body_text:typeof note.bodyText==='string'?note.bodyText:'';
  const separator=String(note.separator||'').trim();
+ const numericPrice=note.price!==null&&note.price!==''&&Number.isFinite(Number(note.price));
+ // The v3 paywall UI feature flag is also present on unrestricted articles.
+ const explicitlyFree=numericPrice&&Number(note.price)===0&&!note.is_limited&&!note.isLimited&&!note.is_membership_only&&!note.isMembershipOnly&&!note.is_trial&&note.can_read!==false&&!note.paywall?.context?.is_membership_connected;
  if(body&&separator){
   const doc=new DOMParser().parseFromString(body,'text/html'),nodes=[...doc.body.querySelectorAll('[id],[name]')];
   const marker=nodes.find(node=>node.getAttribute('id')===separator||node.getAttribute('name')===separator);
   if(marker){
    const range=doc.createRange();range.setStart(doc.body,0);range.setEndBefore(marker);
    const holder=doc.createElement('div');holder.append(range.cloneContents());
-   return{text:clean(holder.innerHTML),field:'body-before-separator',kind:'note-free'};
+   const available=publicBody(holder.innerHTML,'body-before-separator',true);
+   if(available.text)return available;
   }
  }
- const numericPrice=Object.prototype.hasOwnProperty.call(note,'price')&&note.price!==null&&note.price!==''&&Number.isFinite(Number(note.price));
- // is_simple_paid_note is a paywall UI feature flag. The public v3 API also
- // returns it as true for unrestricted, zero-price articles with a full body.
- // Use the price and actual access restrictions to determine free content.
- const explicitlyFree=numericPrice&&Number(note.price)===0&&!note.is_limited&&!note.isLimited&&!note.is_membership_only&&!note.isMembershipOnly&&!note.paywall?.context?.is_membership_connected;
- if(body&&explicitlyFree)return{text:clean(body),field:'free-article-body',kind:'note-free'};
- // Publisher-supplied public leads are useful even when the full/free boundary
- // is unknown. Never use a title or an authenticated paid body as a summary.
- for(const field of ['lead','description','excerpt','summary'])if(typeof note[field]==='string'&&clean(note[field]))return{text:clean(note[field]),field,kind:'note-public-lead'};
- return{text:'',field:'',kind:'note-free'};
+ if(body&&explicitlyFree&&!separator){
+  const available=publicBody(body,'free-article-body');
+  if(available.text)return available;
+ }
+ const explicit=['free_body','freeBody','free_body_html','freeBodyHtml','free_body_text','freeBodyText','free_content','freeContent'];
+ for(const field of explicit){
+  if(typeof note[field]!=='string'||!note[field].trim())continue;
+  const available=publicBody(note[field],field,!explicitlyFree||Boolean(separator));
+  if(available.text)return available;
+ }
+ const title=clean(note.name||note.title);
+ for(const field of ['lead','description']){
+  const text=clean(note[field]);
+  if(text&&text!==title&&/[\p{L}\p{N}]/u.test(text))return {text,blocks:[],field,kind:'note-public-lead'};
+ }
+ return {text:'',blocks:[]};
 }
 function noteSource(note={}){
  const user=note.user||note.author||{},id=account(user),key=String(note.key||note.note_key||note.noteKey||'').toLowerCase();
@@ -49,17 +79,151 @@ function noteSource(note={}){
  if(!url&&id&&/^n[a-f0-9]{12}$/.test(key))url='https://note.com/'+encodeURIComponent(id)+'/n/'+key;
  return{account:id,key,url};
 }
-function compose(row,note={},profile={},requested=readOptions()){
- const selected=options(requested),base={version:1,...selected,text:'',status:'available',source:{kind:'name'}};
- if(selected.content==='name')return base;
- const rawProfile=profile?.rawProfile||profile||{};
- if(selected.content==='profile'){
-  const text=typeof rawProfile.profileText==='string'?rawProfile.profileText:clean(rawProfile.profile??rawProfile.description??rawProfile.bio??rawProfile.introduction??rawProfile.self_introduction??rawProfile.note_intro??'');
-  const shown=excerpt(text,selected.size==='medium'?220:118);
-  return{...base,...shown,status:text?'available':'unavailable',text:text?shown.text:'プロフィール未設定',source:{kind:'profile',account:account(rawProfile),key:'',url:account(rawProfile)?'https://note.com/'+encodeURIComponent(account(rawProfile)):''}};
+const wordSegmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'word'}):null;
+const commonTerms=new Set(['こと','もの','ため','よう','ところ','これ','それ','こちら','わたし','という','この','です','ます','いる','する','なる','ある','ない','さん','自分','今回','記事','the','with','from','this','that','have','into','about','when','what','were']);
+function readingTerms(text){
+ const normalized=text.normalize('NFKC').toLowerCase();
+ const words=wordSegmenter?Array.from(wordSegmenter.segment(normalized),part=>part.isWordLike?part.segment:''):normalized.match(/[\p{Script=Han}\p{Script=Katakana}]+|[a-z0-9]+/gu)||[];
+ return new Set(words.filter(word=>/^\d+$/.test(word)||word.length>=2&&/[\p{Script=Han}\p{Script=Katakana}a-z]/u.test(word)&&!commonTerms.has(word)));
+}
+const readingBoilerplate=/^(?:[\p{Extended_Pictographic}\s\uFE0F【◆]+)?(?:はじめまして|ごきげんよう|こんにちは|こんばんは|おはようございます|いつも(?:読ん|見)|(?:最後|ここ)まで(?:お読み|読ん|ご覧)|よろしければ|気に入ったら|応援よろしく|関連記事|あわせて読み|プロフィール|この記事をシェア|また次回|フォロー|チャンネル登録|スキ(?:をありがとう|[！♡\s])|[\d,]+文字[、で]|この(?:記事|ライン)より)/u;
+const readingTopic=/^(?:今回(?:は|、)|まず[、：:]|そして[、：:]|そこで[、：:]|具体的には[、：:]|たとえば[、：:]|例えば[、：:]|その結果[、：:]|つまり[、：:]|私(?:は|たちは)|筆者は)\s*/u;
+function summaryPoints(blocks,title){
+ const candidates=[],seen=new Set(),headings=[];
+ let heading='',inFooter=false;
+ for(const block of blocks){
+  if(block.heading){
+   heading=block.text.replace(/^[\s【◆●◼︎◇]+|[】\s]+$/gu,'');
+   inFooter=readingBoilerplate.test(heading)||/^(?:その他の|関連する).*(?:こちら|一覧)|\d+人目.*クリエイター/u.test(heading);
+   if(!inFooter&&heading.length<=32&&heading.length>=4&&!/[?!！？]$/.test(heading)&&readingTerms(heading).size)headings.push(heading);
+   continue;
+  }
+  if(inFooter||readingBoilerplate.test(block.text))continue;
+  const sentences=block.text.replace(/https?:\/\/[^\s<]+/gi,'').match(/[^。！？!?]+[。！？!?]?[」』]?/gu)||[];
+  for(const value of sentences){
+   const text=value.trim().replace(/^[-*・●◆▶]\s*/u,'').replace(/[\s\p{Extended_Pictographic}\uFE0F]+$/u,'');
+   const minLength=/^\d/.test(text)?10:15;
+   if(text.length<minLength||text.length>125||seen.has(text)||readingBoilerplate.test(text)||/^[「『（【#＃①-⑳]|[!?！？][」』]?$|(?:ではなく|してから|を使って|で遊んで|という|[はがを、…:：」』])$/u.test(text))continue;
+   seen.add(text);candidates.push({text,heading,position:candidates.length});
+  }
  }
- const available=freeBody(note),shown=excerpt(available.text,selected.size==='medium'?220:118);
- return{...base,...shown,status:available.text?'available':'unavailable',text:available.text?shown.text:'無料公開本文を取得できません',source:{kind:available.kind,field:available.field,...noteSource(note)}};
+ if(candidates.length<2||candidates.reduce((length,point)=>length+point.text.length,0)<52)return null;
+ // Sample across the article for long reads, keeping the end in the scoring pool.
+ const pool=candidates.length<=96?candidates:Array.from({length:96},(_,index)=>candidates[Math.round(index*(candidates.length-1)/95)]);
+ const topic=readingTerms(title),frequency=new Map();
+ for(const point of pool){
+  point.terms=readingTerms(point.text);
+  for(const term of point.terms)frequency.set(term,(frequency.get(term)||0)+1);
+ }
+ for(const point of pool){
+  const topical=[...point.terms].filter(term=>topic.has(term)).length;
+  const repeated=[...point.terms].filter(term=>frequency.get(term)>1).length;
+  const specific=/[0-9０-９]|(?:結果|理由|比較|確認|方法|使う|試し|特徴|ために|ことで|分か|違い|条件|必要)/u.test(point.text);
+  point.score=topical*2.4+Math.min(repeated,5)*.65+(specific?1.4:0)+(headings.includes(point.heading)?.75:0)-Math.abs(point.text.length-40)*.035;
+  if(/(?:ありがとう|リンクから|下記|応援|ご参加|ご覧ください|販売中|募集しています|フォロー)/u.test(point.text))point.score-=4;
+ }
+ const ranked=pool.filter(point=>point.terms.size>=2&&point.score>=.7).sort((a,b)=>b.score-a.score);
+ return {ranked,headings,midpoint:Math.floor(candidates.length/2)};
+}
+function summarizePoint(value){
+ let point=value.replace(readingTopic,'').replace(/[。．.]+$/u,'').trim();
+ if(!point)return '';
+ // Convert only known endings, preserving negation and the stated tense.
+ point=point.replace(/していました$/u,'していたと振り返ります')
+  .replace(/しています$/u,'しているといいます')
+  .replace(/しませんでした$/u,'しなかったと述べています')
+  .replace(/しました$/u,'したと述べています')
+  .replace(/になりました$/u,'になったといいます')
+  .replace(/できました$/u,'できたといいます')
+  .replace(/必要です$/u,'必要だと説明しています')
+  .replace(/^(.+まで)投稿(?:可|可能(?:です)?)$/u,'投稿は$1です');
+ return point+'。';
+}
+function structuredSummary(title,available,outline,budget){
+ const {headings,ranked}=outline;
+ const directions=[...new Set(headings)].filter(text=>/^(?:参加方法|投稿ルール|応募方法|設定方法|使い方|利用方法|注意事項|手順|準備するもの)$/u.test(text));
+ if(directions.length>=2&&title.length>=4&&title.length<=38){
+  const selected=directions.slice(0,2);
+  const topic='「'+title+'」の'+selected.join('や')+'を案内しています。';
+  const points=ranked.filter(point=>selected.includes(point.heading));
+  const limit=points.find(point=>/\d+(?:人|日|件|記事|回).*まで/u.test(point.text));
+  const details=(limit?[limit,...points]:points).map(point=>summarizePoint(point.text));
+  const detail=details.find(text=>text&&text.length+topic.length<=budget);
+  if(detail)return topic+detail;
+ }
+ const names=[...new Set(headings)].filter(text=>/^(?:.{1,19})(?:さん|様)$/u.test(text));
+ if(names.length>=2&&names.length===headings.length&&/プロンプト(?:で遊ん|を試し|を使って|で作っ)/u.test(available.text)){
+  const context=/文化祭/u.test(available.blocks.slice(0,15).map(block=>block.text).join(''))?'文化祭の企画で、':'';
+  const topic=context+names.slice(0,3).join('、')+(names.length>3?'ら'+names.length+'人':'')+'のプロンプトを試した記録です。';
+  const example=available.text.match(/『([^』\n]{2,24})』で(?:遊ん|作っ|試し)/u);
+  const detail=example?'「'+example[1]+'」を使った作例も紹介しています。':'';
+  return topic.length+detail.length<=budget?topic+detail:topic;
+ }
+ return '';
+}
+function summarizeBody(available,note,budget){
+ if(available.kind!=='note-free')return '';
+ const title=clean(note.name||note.title);
+ const outline=summaryPoints(available.blocks,title);
+ if(!outline)return '';
+ const structured=structuredSummary(title,available,outline,budget);
+ if(structured&&structured.length<=budget)return structured;
+ const {ranked,headings,midpoint}=outline;
+ let best='',bestScore=-Infinity;
+ for(const first of ranked.slice(0,12)){
+  for(const second of ranked.slice(0,20)){
+   if(first.position>=second.position||second.position<midpoint||first.position>=midpoint)continue;
+   const shared=[...first.terms].filter(term=>second.terms.has(term)).length;
+   if(shared>=.65*Math.min(first.terms.size,second.terms.size))continue;
+   const main=summarizePoint(first.text),detail=summarizePoint(second.text);
+   if(!main||!detail||main.length+detail.length>budget)continue;
+   const topics=[...new Set([first.heading,second.heading])].filter(topic=>headings.includes(topic));
+   const context=topics.length===2?'「'+topics.join('」と「')+'」を取り上げています。':'';
+   const hasContext=context&&context.length+main.length+detail.length<=budget;
+   const rewritten=main!==first.text.replace(/[。．.]+$/u,'')+'。'||detail!==second.text.replace(/[。．.]+$/u,'')+'。';
+   if(!hasContext&&!rewritten)continue;
+   const text=hasContext?context+main+detail:main+detail;
+   const score=first.score+second.score+(topics.length===2?1:0)+Math.min(shared,2)*.8;
+   if(score>bestScore){best=text;bestScore=score;}
+  }
+ }
+ // With too little distinct material, leave the original opening in its own mode.
+ return best&&best.replace(/\s+/g,'')!==available.text.replace(/\s+/g,'')?best:'';
+}
+function profileIntro(profile){
+ const raw=profile?.rawProfile||profile||{};
+ let text=typeof raw.profileText==='string'?raw.profileText.trim():'';
+ for(const field of ['profile','description','bio','introduction','self_introduction','note_intro']){
+  if(text)break;
+  text=clean(raw[field]);
+ }
+ const id=account(raw);
+ return {text,source:{kind:'profile',account:id,key:'',url:id?'https://note.com/'+encodeURIComponent(id):''}};
+}
+function compose(row,note={},profile={},requested=readOptions()){
+ const selected=options(requested),base={version:2,...selected,display:'name',text:'',status:'available',source:{kind:'name'}};
+ if(selected.content==='name')return base;
+ const budget=selected.size==='medium'?150:108;
+ if(selected.content!=='profile'){
+  const available=freeBody(note);
+  const source={kind:available.kind,field:available.field,...noteSource(note)};
+  const summary=selected.content==='summary'?summarizeBody(available,note,budget):'';
+  if(summary)return {...base,display:'summary',text:summary,partial:available.partial,source};
+  if(available.text)return {...base,...excerpt(available.text,budget),display:'lead',source};
+ }
+ const fetched=profileIntro(profile);
+ const intro=fetched.text?fetched:profileIntro(note.user||note.author);
+ if(intro.text)return {...base,...excerpt(intro.text,budget),display:'profile',source:intro.source};
+ return base;
+}
+function visibleContent(value){return value?.display||value?.content||'name'}
+function label(value){
+ switch(visibleContent(value)){
+  case 'summary':return value.version!==2?'無料公開部分の要約':value.partial?'公開部分の要約':'記事の要約';
+  case 'lead':return '読み始め';
+  case 'profile':return 'プロフィール';
+  default:return '';
+ }
 }
 function tex(value){
  const escapes={'\\':'\\textbackslash{}','{':'\\{','}':'\\}','$':'\\$','&':'\\&','#':'\\#','_':'\\_','%':'\\%','^':'\\textasciicircum{}','~':'\\textasciitilde{}','\t':'\\quad ',' ':'\\space ','`':'\\verb+`+',"'":"\\verb+'+"};
@@ -125,9 +289,8 @@ function aboveLayout(row,widthPx=288,fontBasePx=20){
  // the independent inspector must still measure the actual rendered DOM.
  const estimatedFontPx=base*.605,cellBudget=Math.max(3,Math.min(22,Math.floor((bodyWidthPx-estimatedFontPx*1.5-20)/estimatedFontPx)));
  const contract={version:2,font:'tiny',cellBudget,bodyWidthPx,fontBasePx:base,maxFontPx:14,maxHeightPx:140};
- if(!value||value.size!=='thin'||value.content==='name'||row.finalMarker)return{...contract,text:'',lines:[],lineCount:0,wordSplitCandidate:false,kinsokuCandidate:false,truncated:false};
- const label=value.content==='profile'?'◇ プロフィール':'◇ 無料公開部分の要約';
- const header=responsiveWrap(label,cellBudget),body=responsiveWrap(value.text,cellBudget),plain=[...header.lines,...body.lines];
+ if(!value||value.size!=='thin'||visibleContent(value)==='name'||row.finalMarker)return{...contract,text:'',lines:[],lineCount:0,wordSplitCandidate:false,kinsokuCandidate:false,truncated:false};
+ const header=responsiveWrap('◇ '+label(value),cellBudget),body=responsiveWrap(value.text,cellBudget),plain=[...header.lines,...body.lines];
  const formula=plain.map(line=>'\\text{'+tex(line)+'}');
  return{...contract,text:'$${\\tiny\\boxed{\\begin{array}{l}'+formula.join('\\\\')+'\\end{array}}}$$',lines:plain,lineCount:plain.length,wordSplitCandidate:body.wordSplitCandidate,kinsokuCandidate:header.kinsokuCandidate||body.kinsokuCandidate,truncated:Boolean(value.truncated)};
 }
@@ -157,12 +320,22 @@ function presentationContext(view){
 function mount(panel){
  if(!panel||panel.querySelector('[data-presentation-size]'))return;
  const saved=readOptions(),row=document.createElement('div');row.className='amount presentation';row.style.gridTemplateColumns='1fr 1fr';
- row.innerHTML='<select data-presentation-size aria-label="サムネイルの大きさ"><option value="thin">極薄</option><option value="medium">中型</option></select><select data-presentation-content aria-label="紹介内容"><option value="name">名前のみ</option><option value="profile">プロフィール</option><option value="summary">記事の要約</option></select>';
+ row.innerHTML='<select data-presentation-size aria-label="サムネイルの大きさ"><option value="thin">極薄</option><option value="medium">中型</option></select><select data-presentation-content aria-label="紹介内容"><option value="name">名前だけ</option><option value="profile">プロフィール</option><option value="lead">読み始め</option><option value="summary">要約</option></select>';
  row.querySelector('[data-presentation-size]').value=saved.size;row.querySelector('[data-presentation-content]').value=saved.content;
  const amount=panel.querySelector('.amount');if(amount)amount.before(row);else panel.querySelector('.body')?.append(row);
- const hint=document.createElement('div');hint.className='hint';hint.dataset.presentationHint='';row.after(hint);
- const update=()=>{const selected=options({size:row.querySelector('[data-presentation-size]').value,content:row.querySelector('[data-presentation-content]').value});try{localStorage.setItem(PREF,JSON.stringify(selected))}catch{}hint.textContent=selected.content==='name'?'名前は画像の中':selected.size==='thin'?'紹介文は画像の上｜長文は抜粋':'紹介文は画像の中｜長文は抜粋';};
- row.addEventListener('change',update);update();
+ const rangeLabel=document.createElement('label');
+ rangeLabel.className='hint';
+ rangeLabel.style.cssText='display:flex;align-items:center;gap:4px;min-height:24px;color:#dff6ff;font-size:9px;cursor:pointer';
+ const ranges=document.createElement('input');
+ ranges.type='checkbox';ranges.dataset.presentationRanges='';ranges.checked=saved.showCreatorRanges;
+ ranges.style.cssText='width:14px;height:14px;margin:0;flex:none;accent-color:#68d6ec';
+ rangeLabel.append(ranges,'何人目かの見出し');
+ row.after(rangeLabel);
+ const update=()=>{
+  const selected=options({size:row.querySelector('[data-presentation-size]').value,content:row.querySelector('[data-presentation-content]').value,showCreatorRanges:ranges.checked});
+  try{localStorage.setItem(PREF,JSON.stringify(selected))}catch{}
+ };
+ row.addEventListener('change',update);ranges.addEventListener('change',update);
 }
-page.__MUMEI_PROFILE_CARD_CONTENT__={readOptions,options,compose,aboveText,aboveLayout,legacyAboveText,matchesAboveText,layoutContract,presentationContext,mount,clean,excerpt,freeBody};
+ page.__MUMEI_PROFILE_CARD_CONTENT__={readOptions,options,compose,visibleContent,label,aboveText,aboveLayout,legacyAboveText,matchesAboveText,layoutContract,presentationContext,mount,clean,excerpt,freeBody,profileIntro};
 })();

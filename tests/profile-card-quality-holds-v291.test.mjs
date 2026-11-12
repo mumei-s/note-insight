@@ -145,7 +145,7 @@ test('fresh metadata cannot release a hold when an older version already owns th
 });
 
 test('a middle source hold keeps the exact prefix, makes no row-11 heading and repairs only the same pending person',async t=>{
- let wrong=true;const r=await runtime({count:12,requestMutator:wrongOwner(10,()=>wrong)});t.after(()=>r.close());
+ let wrong=true;const r=await runtime({count:12,localStorageMap:new Map([['mumei_profile_card_presentation_v292','{"showCreatorRanges":true}']]),requestMutator:wrongOwner(10,()=>wrong)});t.after(()=>r.close());
  await r.history();const run=held(r,{index:10}),plan=selected(run),prefix=clone(r.state.images),pausedDoc=r.doc(),batch=r.quality.snapshot().batchId;
  assert.equal(pausedDoc.content.filter(node=>node.type==='heading').length,1);
  assert.ok(!pausedDoc.content.some(node=>node.type==='paragraph'&&JSON.stringify(node).includes('quality_person_10')));
@@ -161,7 +161,7 @@ test('a middle source hold keeps the exact prefix, makes no row-11 heading and r
 });
 
 test('core special resume repairs a held row before adding its section heading',async t=>{
- let wrong=true;const r=await runtime({count:12,requestMutator:wrongOwner(10,()=>wrong)});t.after(()=>r.close());
+ let wrong=true;const r=await runtime({count:12,localStorageMap:new Map([['mumei_profile_card_presentation_v292','{"showCreatorRanges":true}']]),requestMutator:wrongOwner(10,()=>wrong)});t.after(()=>r.close());
  await r.normal({flow:'special'});const run=held(r,{index:10}),plan=selected(run),stopped=r.doc();
  assert.equal(stopped.content.filter(node=>node.type==='heading').length,1);
  await r.core.pasteSavedSpecial();held(r,{index:10});assert.deepEqual(r.doc(),stopped);
@@ -169,7 +169,7 @@ test('core special resume repairs a held row before adding its section heading',
 });
 
 test('a swapped generated PNG holds before the next heading/profile and a correct regeneration resumes without source requests',async t=>{
- const r=await runtime({count:12});t.after(()=>r.close());r.state.swapFile=true;
+ const r=await runtime({count:12,localStorageMap:new Map([['mumei_profile_card_presentation_v292','{"showCreatorRanges":true}']])});t.after(()=>r.close());r.state.swapFile=true;
  r.editor.patch(`const heldTestMakeFile=makeFile;makeFile=async row=>{const file=await heldTestMakeFile(row);if(row.urlname==='quality_person_0')state.firstGeneratedFile=file;return row.urlname==='quality_person_10'&&state.swapFile?state.firstGeneratedFile:file};`);
  await r.history();const run=held(r,{index:10,kind:'file'}),plan=selected(run),stopped=r.doc(),prefix=clone(r.state.images),requests=r.state.requests.length;
  assert.equal(stopped.content.filter(node=>node.type==='heading').length,1);

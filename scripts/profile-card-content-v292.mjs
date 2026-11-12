@@ -50,20 +50,55 @@ function presentationActivityHits(view,run){
 export function transformCoreContent(source){
  source=once(source,"const STATUS='mumei-profile-card-paster-status-v1';", "const STATUS='mumei-profile-card-paster-status-v1';"+adapters);
  source=once(source,' bindPanelInputEvents(p);',' bindPanelInputEvents(p);\n contentApi?.mount?.(p);');
- source=changeFunction(source,'creatorProfile',part=>once(part,'   creator:String(u.nickname||u.name||id).trim(),',"   profileText:contentOptions?.content==='profile'?(contentApi?.clean?.(u.profile??u.description??u.bio??u.introduction??u.self_introduction??u.note_intro??'')||''):'',presentationAccount:String(u.urlname||u.urlName||u.url_name||'').toLowerCase(),\n   creator:String(u.nickname||u.name||id).trim(),"));
+ source=changeFunction(source,'creatorProfile',part=>once(part,'   creator:String(u.nickname||u.name||id).trim(),',"   profileText:contentOptions?.content==='name'?'':contentApi?.profileIntro?.(u).text||'',presentationAccount:String(u.urlname||u.urlName||u.url_name||'').toLowerCase(),\n   creator:String(u.nickname||u.name||id).trim(),"));
  source=changeFunction(source,'enrich',part=>once(part,'  ...row,',"  ...row,profileText:String(profile?.profileText||''),presentation:composePresentation(row,note,profile),"));
- source=changeFunction(source,'createImageList',part=>once(part,'  const input=inputValues();','  const input=inputValues();\n  contentOptions=contentApi?.readOptions?.()||contentOptions;'));
+ source=changeFunction(source,'createImageList',part=>{
+  part=once(part,'  const input=inputValues();','  const input=inputValues();\n  contentOptions=contentApi?.readOptions?.()||contentOptions;\n  const showCreatorRanges=contentOptions?.showCreatorRanges===true;');
+  part=once(part,'pauseStage:null,special:Boolean(special)','pauseStage:null,showCreatorRanges,special:Boolean(special)');
+  part=once(part,'｜ランダム極薄50種｜①画像一覧','｜①画像一覧');
+  return once(part,`   if(special){
+    if(row.finalMarker){
+     const text='最後に｜実績の算数';
+     const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    }else if(i%10===0){
+     const text=sectionHeadingText(Math.floor(i/10));
+     const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    }
+   }`,`   if(special&&row.finalMarker||showCreatorRanges&&!row.finalMarker&&i%10===0){
+    const text=row.finalMarker?'最後に｜実績の算数':sectionHeadingText(Math.floor(i/10),rows.length-1,special);
+    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+   }`);
+ });
+ source=changeFunction(source,'pasteSavedSpecial',part=>{
+  part=once(part,'   rows=await buildRowsFromSavedSpecial(useCount);','   contentOptions=contentApi?.readOptions?.()||contentOptions;\n   rows=await buildRowsFromSavedSpecial(useCount);');
+  part=once(part,"coreImageRun:true,special:true,","coreImageRun:true,special:true,showCreatorRanges:contentOptions?.showCreatorRanges===true,");
+  return once(part,`   }else if(run.special&&i%10===0){
+    const text=sectionHeadingText(Math.floor(i/10));`,`   }else if((run.showCreatorRanges??run.special)&&i%10===0&&!row.finalMarker){
+    const text=sectionHeadingText(Math.floor(i/10),run.showCreatorRanges===undefined?undefined:rows.length-1,run.special);`);
+ });
  source=changeFunction(source,'uploadOne',part=>once(part,' assertCreatorAllowed(row);',' assertCreatorAllowed(row);\n insertPos=insertPresentationAt(view,row,insertPos).nextPos;'));
  source=changeFunction(source,'resolveOwnedActivityHits',part=>once(part,' const run=readRun(),counts=new Map(),out=[];',' const run=readRun(),counts=new Map(),out=[];\n const presentation=presentationActivityHits(view,run||{});if(presentation)return presentation;'));
  source=changeFunction(source,'deleteAllGenerated',part=>{
   part=once(part," const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');", " const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');\n const presentationHits=presentationActivityHits(view,run),presentationPositions=presentationHits?new Set(presentationHits.map(hit=>hit.pos)):null;");
   return once(part,"  if(node.type?.name==='paragraph'&&activityCounts.has(text))textCandidates.activities.push({node,pos});","  if(node.type?.name==='paragraph'&&activityCounts.has(text)&&(!presentationPositions||presentationPositions.has(pos)))textCandidates.activities.push({node,pos});");
  });
- return once(source,'function sectionHeadingText(groupIndex){',coreInsert+'\nfunction sectionHeadingText(groupIndex){');
+ return changeFunction(source,'sectionHeadingText',part=>coreInsert+`
+function sectionHeadingText(groupIndex,count=Infinity,special=true){
+ const from=groupIndex*10+1,to=Math.min(from+9,count);
+ const range=from===to?String(from):from+'〜'+to;
+ return String(groupIndex+1).padStart(2,'0')+'｜'+range+'人目の'+(special?'「はじめまして」':'クリエイター様');
+}
+`);
 }
 export function transformEditorContent(source){
  source=once(source,"const STATUS='mumei-profile-card-paster-status-v1';", "const STATUS='mumei-profile-card-paster-status-v1';"+adapters);
- source=changeFunction(source,'preparePerson',part=>once(part,'   ...latest,','   ...latest,presentation:composePresentation(latest,note,profile),'));
+ source=changeFunction(source,'preparePerson',part=>{
+  part=once(part,"   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id))",`   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)).catch(error=>{
+    if(stopRequested)throw error;
+    return null;
+   })`);
+  return once(part,'   ...latest,','   ...latest,presentation:composePresentation(latest,note,profile),');
+ });
  source=changeFunction(source,'buildRows',part=>{
   part=once(part,' const compatible=saved?.signature===signature||saved?.signature===previousSignature;',` const compatible=saved?.signature===signature||saved?.signature===previousSignature;
  if(compatible){
@@ -71,12 +106,20 @@ export function transformEditorContent(source){
   else if(Array.isArray(saved.rows)&&saved.rows.length)contentOptions=saved.rows.find(row=>row.presentation)?.presentation||null;
   if(Array.isArray(saved.rows)&&saved.rows.some(row=>Boolean(row.presentation)!==Boolean(contentOptions)||row.presentation&&(row.presentation.size!==contentOptions.size||row.presentation.content!==contentOptions.content)))throw new Error('保存済みの紹介形式が混在しています。本文と取得済み情報は保持しています');
  }`);
-  return once(part,'  writePrep({signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();',"  writePrep({signature,index,rows,skipped,presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content}:null,updatedAt:Date.now()});await flushPrepBackup();");
+  return once(part,'  writePrep({signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();',"  writePrep({signature,index,rows,skipped,presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content,showCreatorRanges:contentOptions.showCreatorRanges}:null,updatedAt:Date.now()});await flushPrepBackup();");
  });
  source=changeFunction(source,'enrichFinal',part=>once(part,"  return{...row,creator:","  row.presentation=composePresentation(row,note,profile);\n  return{...row,creator:"));
  source=changeFunction(source,'createFixed300',part=>{
   part=once(part,'  let existing=readRun();','  let existing=readRun();\n  contentOptions=existing?.rows?.find(row=>row.presentation)?.presentation||(existing?.rows?.length?null:contentApi?.readOptions?.()||contentOptions);');
+  part=once(part,"stage:'images_building',likesHistory:!gallery","stage:'images_building',showCreatorRanges:contentOptions?.showCreatorRanges??true,likesHistory:!gallery");
+  part=once(part,'   }else if(i%10===0){\n    const text=headingText(', '   }else if(run.showCreatorRanges!==false&&i%10===0){\n    const text=headingText(');
   return once(part,'   if(!row.finalMarker){\n    const text=activityText(row);',"   if(!row.finalMarker&&row.presentation){\n    insertPos=insertPresentationAt(view,row,insertPos).nextPos;\n   }else if(!row.finalMarker){\n    const text=activityText(row);");
+ });
+ source=changeFunction(source,'refreshHistoryHeadings',part=>once(part,'const run=readRun();if(!run)return;','const run=readRun();if(!run||run.showCreatorRanges===false)return;'));
+ source=changeFunction(source,'reconcileGalleryHeadings',part=>once(part,' if(!run?.galleryParticipantUpgrade?.pendingHeadings)return false;',' if(run?.showCreatorRanges===false||!run?.galleryParticipantUpgrade?.pendingHeadings)return false;'));
+ source=changeFunction(source,'assertGalleryPaste',part=>{
+  part=once(part,' const creators=rows.slice(0,-1);',' const creators=rows.slice(0,-1),showCreatorRanges=readRun()?.showCreatorRanges!==false;');
+  return once(part,'  if(i%10===0&&!findHeading(', '  if(showCreatorRanges&&i%10===0&&!findHeading(');
  });
  source=changeFunction(source,'activityText',part=>once(part,'function activityText(row){','function activityText(row){\n if(row.presentation)return contentApi?.aboveText?.(row)||\'\';'));
  source=changeFunction(source,'clearCurrentPaste',part=>{

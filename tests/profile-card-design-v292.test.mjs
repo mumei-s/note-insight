@@ -67,14 +67,14 @@ test('asset replacement reserves the complete extended design pool',()=>{
  assert.ok(choices.includes(freed));
 });
 
-test('medium content uses reference horizontal layout and marks excerpts without altering source text',async()=>{
+test('medium content uses reference horizontal layout and shortens text without altering its source',async()=>{
  for(const kind of ['core','editor']){
   const {api,paint,canvases}=runtime(kind),text='A long original profile.\n'+('Full source words '.repeat(100)),input={...row(0),designIndex:0,presentation:{size:'medium',content:'profile',text}},before=JSON.stringify(input.presentation);
   await api.makeFile(input);
   assert.equal(canvases.at(-1).width,860);assert.equal(canvases.at(-1).height,360);
   assert.equal(JSON.stringify(input.presentation),before);
-  assert.ok(paint.some(command=>command[0]==='fillText'&&command[1]==='プロフィール（抜粋）'));
-  assert.ok(paint.some(command=>command[0]==='fillText'&&command[1].endsWith('…（抜粋）')));
+  assert.ok(paint.some(command=>command[0]==='fillText'&&command[1]==='プロフィール'));
+  assert.ok(paint.some(command=>command[0]==='fillText'&&command[1].endsWith('…')));
   assert.equal(input.presentationRender.fontSize,20);assert.equal(input.presentationRender.excerpt,true);
   const images=paint.filter(command=>command[0]==='drawImage');
   assert.ok(images.some(command=>command[1]==='thumb'&&command[2]<450),'article image is on the left');
