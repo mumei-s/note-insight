@@ -25,28 +25,38 @@ function excerpt(value,budget=220){
  return{text:prefix.slice(0,end||prefix.length).trimEnd()+'…',truncated:true};
 }
 function readingBlocks(body){
- const doc=new DOMParser().parseFromString(body.replace(/<br\s*\/?\s*>/gi,'\n').replace(/<\/(?:p|div|h[1-6]|li|ul|ol|section)>/gi,'\n$&'),'text/html');
- doc.body.querySelectorAll('script,style,iframe,form,button,nav,figure,figcaption,blockquote,pre,table,[hidden]').forEach(node=>node.remove());
+ const doc=new DOMParser().parseFromString(body.replace(/<br\s*\/?\s*>/gi,'\uFDD3\n').replace(/<\/(?:p|div|h[1-6]|li|ul|ol|section)>/gi,'\n$&'),'text/html');
+ doc.body.querySelectorAll('script,style,iframe,form,button,nav,figure,figcaption,pre,table,[hidden]').forEach(node=>node.remove());
+ for(const quote of doc.body.querySelectorAll('blockquote')){
+  quote.prepend('\n\uFDD1\n');
+  quote.append('\n\uFDD2\n');
+ }
  for(const heading of doc.body.querySelectorAll('h1,h2,h3,h4,h5,h6'))heading.prepend('\n\uFDD0');
+ let quoteDepth=0;
  return String(doc.body.textContent||'').split(/\r?\n/).flatMap(line=>{
-  const text=line.replace(/^[\s\uFDD0]+|\s+$/g,'').replace(/[\t\u00a0 ]+/g,' ');
+  if(line.trim()==='\uFDD1'){quoteDepth++;return [];}
+  if(line.trim()==='\uFDD2'){quoteDepth=Math.max(0,quoteDepth-1);return [];}
+  const text=line.replace(/^[\s\uFDD0]+|[\s\uFDD3]+$/g,'').replace(/[\t\u00a0 ]+/g,' ');
   if(!text||/\$\$|\\(?:begin|text|char|boxed|large|scriptsize|tiny)\b/u.test(text)||/^https?:\/\/\S+$/i.test(text)||/^(?:[#＃]\S+\s*)+$/u.test(text)||!/[\p{L}\p{N}]/u.test(text))return [];
   const markdown=/^#{1,6}\s+/.test(text);
-  return [{text:markdown?text.replace(/^#{1,6}\s+/,''):text,heading:markdown||line.includes('\uFDD0')}];
+  return [{text:markdown?text.replace(/^#{1,6}\s+/,''):text,heading:markdown||line.includes('\uFDD0'),quote:quoteDepth>0,soft:line.endsWith('\uFDD3')}];
  });
 }
 function publicBody(body,field,partial=false){
  const blocks=readingBlocks(body);
  return {text:blocks.map(block=>block.text).join('\n'),blocks,field,kind:'note-free',partial};
 }
+function published(note){return note.status!=='draft'&&note.is_draft!==true&&note.isDraft!==true&&note.is_published!==false&&note.isPublished!==false&&note.is_published_preview_note!==true}
+function restricted(note){
+ return Boolean(Number(note.price)>0||note.is_limited||note.isLimited||note.is_membership_only||note.isMembershipOnly||note.is_trial||note.isTrial||note.can_read===false||note.canRead===false||note.can_read_note_all===false||note.isMembershipConnected||note.paywall?.context?.is_membership_connected);
+}
 function freeBody(note={}){
- if(note.is_draft===true||note.is_published===false||note.is_published_preview_note===true)return {text:'',blocks:[]};
- const body=typeof note.body==='string'?note.body:typeof note.body_html==='string'?note.body_html:typeof note.body_text==='string'?note.body_text:typeof note.bodyText==='string'?note.bodyText:'';
+ if(!published(note))return {text:'',blocks:[]};
+ const bodies=new Set([note.body,note.body_html,note.bodyHtml,note.body_text,note.bodyText].filter(body=>typeof body==='string'&&body.trim()));
  const separator=String(note.separator||'').trim();
- const numericPrice=note.price!==null&&note.price!==''&&Number.isFinite(Number(note.price));
  // The v3 paywall UI feature flag is also present on unrestricted articles.
- const explicitlyFree=numericPrice&&Number(note.price)===0&&!note.is_limited&&!note.isLimited&&!note.is_membership_only&&!note.isMembershipOnly&&!note.is_trial&&note.can_read!==false&&!note.paywall?.context?.is_membership_connected;
- if(body&&separator){
+ const explicitlyFree=(note.price===0||note.price==='0')&&!restricted(note);
+ if(separator)for(const body of bodies){
   const doc=new DOMParser().parseFromString(body,'text/html'),nodes=[...doc.body.querySelectorAll('[id],[name]')];
   const marker=nodes.find(node=>node.getAttribute('id')===separator||node.getAttribute('name')===separator);
   if(marker){
@@ -56,9 +66,13 @@ function freeBody(note={}){
    if(available.text)return available;
   }
  }
- if(body&&explicitlyFree&&!separator){
-  const available=publicBody(body,'free-article-body');
-  if(available.text)return available;
+ if(explicitlyFree&&!separator){
+  let longest=null;
+  for(const body of bodies){
+   const available=publicBody(body,'free-article-body');
+   if(available.text.length>(longest?.text.length||0))longest=available;
+  }
+  if(longest)return longest;
  }
  const explicit=['free_body','freeBody','free_body_html','freeBodyHtml','free_body_text','freeBodyText','free_content','freeContent'];
  for(const field of explicit){
@@ -79,6 +93,16 @@ function noteSource(note={}){
  if(!url&&id&&/^n[a-f0-9]{12}$/.test(key))url='https://note.com/'+encodeURIComponent(id)+'/n/'+key;
  return{account:id,key,url};
 }
+const listedArticles=new Map();
+function clearListedArticles(){listedArticles.clear()}
+function rememberListedArticle(note){
+ const source=noteSource(note);
+ if(!source.account||!/^n[a-f0-9]{12}$/.test(source.key))return;
+ const key=source.account+'|'+source.key;
+ listedArticles.delete(key);
+ listedArticles.set(key,note);
+ if(listedArticles.size>1500)listedArticles.delete(listedArticles.keys().next().value);
+}
 const wordSegmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'word'}):null;
 const commonTerms=new Set(['こと','もの','ため','よう','ところ','これ','それ','こちら','わたし','という','この','です','ます','いる','する','なる','ある','ない','さん','自分','今回','記事','the','with','from','this','that','have','into','about','when','what','were']);
 function readingTerms(text){
@@ -88,10 +112,23 @@ function readingTerms(text){
 }
 const readingBoilerplate=/^(?:[\p{Extended_Pictographic}\s\uFE0F【◆]+)?(?:はじめまして|ごきげんよう|こんにちは|こんばんは|おはようございます|いつも(?:読ん|見)|(?:最後|ここ)まで(?:お読み|読ん|ご覧)|よろしければ|気に入ったら|応援よろしく|関連記事|あわせて読み|プロフィール|この記事をシェア|また次回|フォロー|チャンネル登録|スキ(?:をありがとう|[！♡\s])|[\d,]+文字[、で]|この(?:記事|ライン)より)/u;
 const readingTopic=/^(?:今回(?:は|、)|まず[、：:]|そして[、：:]|そこで[、：:]|具体的には[、：:]|たとえば[、：:]|例えば[、：:]|その結果[、：:]|つまり[、：:]|私(?:は|たちは)|筆者は)\s*/u;
+function summaryParagraphs(blocks){
+ const paragraphs=[];
+ for(const block of blocks){
+  const previous=paragraphs.at(-1);
+  if(previous?.soft&&!previous.heading&&!previous.quote&&!block.heading&&!block.quote){
+   const space=/[a-z0-9]$/i.test(previous.text)&&/^[a-z0-9]/i.test(block.text)?' ':'';
+   previous.text+=space+block.text;
+   previous.soft=block.soft;
+  }else paragraphs.push({...block});
+ }
+ return paragraphs;
+}
 function summaryPoints(blocks,title){
  const candidates=[],seen=new Set(),headings=[];
  let heading='',inFooter=false;
- for(const block of blocks){
+ for(const block of summaryParagraphs(blocks)){
+  if(block.quote)continue;
   if(block.heading){
    heading=block.text.replace(/^[\s【◆●◼︎◇]+|[】\s]+$/gu,'');
    inFooter=readingBoilerplate.test(heading)||/^(?:その他の|関連する).*(?:こちら|一覧)|\d+人目.*クリエイター/u.test(heading);
@@ -172,7 +209,7 @@ function summarizeBody(available,note,budget){
  let best='',bestScore=-Infinity;
  for(const first of ranked.slice(0,12)){
   for(const second of ranked.slice(0,20)){
-   if(first.position>=second.position||second.position<midpoint||first.position>=midpoint)continue;
+   if(first.position>=second.position)continue;
    const shared=[...first.terms].filter(term=>second.terms.has(term)).length;
    if(shared>=.65*Math.min(first.terms.size,second.terms.size))continue;
    const main=summarizePoint(first.text),detail=summarizePoint(second.text);
@@ -183,7 +220,8 @@ function summarizeBody(available,note,budget){
    const rewritten=main!==first.text.replace(/[。．.]+$/u,'')+'。'||detail!==second.text.replace(/[。．.]+$/u,'')+'。';
    if(!hasContext&&!rewritten)continue;
    const text=hasContext?context+main+detail:main+detail;
-   const score=first.score+second.score+(topics.length===2?1:0)+Math.min(shared,2)*.8;
+   const spansBody=first.position<midpoint&&second.position>=midpoint;
+   const score=first.score+second.score+(spansBody?1.8:0)+(topics.length===2?1:0)+Math.min(shared,2)*.8;
    if(score>bestScore){best=text;bestScore=score;}
   }
  }
@@ -201,25 +239,38 @@ function profileIntro(profile){
  return {text,source:{kind:'profile',account:id,key:'',url:id?'https://note.com/'+encodeURIComponent(id):''}};
 }
 function compose(row,note={},profile={},requested=readOptions()){
- const selected=options(requested),base={version:2,...selected,display:'name',text:'',status:'available',source:{kind:'name'}};
+ const selected=options(requested),base={version:3,...selected,display:'name',text:'',status:'available',source:{kind:'name'}};
  if(selected.content==='name')return base;
  const budget=selected.size==='medium'?150:108;
+ const listed=listedArticles.get(account(row)+'|'+String(row?.key||'').toLowerCase());
+ const useListed=listed&&listed!==note&&published(note)&&(!restricted(note)||restricted(listed));
+ const sources=useListed?[note,listed]:[note];
  if(selected.content!=='profile'){
-  const available=freeBody(note);
-  const source={kind:available.kind,field:available.field,...noteSource(note)};
-  const summary=selected.content==='summary'?summarizeBody(available,note,budget):'';
-  if(summary)return {...base,display:'summary',text:summary,partial:available.partial,source};
-  if(available.text)return {...base,...excerpt(available.text,budget),display:'lead',source};
+  let opening=null;
+  for(const article of sources){
+   const available=freeBody(article);
+   if(!available.text)continue;
+   const source={kind:available.kind,field:available.field,...noteSource(article)};
+   const summary=selected.content==='summary'?summarizeBody(available,article,budget):'';
+   if(summary)return {...base,display:'summary',text:summary,partial:available.partial,source};
+   if(!opening||opening.source.kind!=='note-free'&&available.kind==='note-free'){
+    opening={...base,...excerpt(available.text,budget),display:'lead',source};
+   }
+   if(selected.content==='lead'&&available.kind==='note-free')return opening;
+  }
+  if(opening)return opening;
  }
- const fetched=profileIntro(profile);
- const intro=fetched.text?fetched:profileIntro(note.user||note.author);
- if(intro.text)return {...base,...excerpt(intro.text,budget),display:'profile',source:intro.source};
+ for(const candidate of [profile,...sources.map(article=>article.user||article.author)]){
+  const intro=profileIntro(candidate);
+  if(intro.text)return {...base,...excerpt(intro.text,budget),display:'profile',source:intro.source};
+ }
  return base;
 }
 function visibleContent(value){return value?.display||value?.content||'name'}
+function introText(value){return String(value?.text||'').trim().replace(/…（抜粋）$/u,'…')}
 function label(value){
  switch(visibleContent(value)){
-  case 'summary':return value.version!==2?'無料公開部分の要約':value.partial?'公開部分の要約':'記事の要約';
+  case 'summary':return value.version<2||!value.version?'無料公開部分の要約':value.partial?'公開部分の要約':'記事の要約';
   case 'lead':return '読み始め';
   case 'profile':return 'プロフィール';
   default:return '';
@@ -280,7 +331,7 @@ function responsiveWrap(value,budget){
  for(const original of String(value??'').replace(/\r\n?/g,'\n').split('\n'))segment(original);
  return{lines,wordSplitCandidate,kinsokuCandidate};
 }
-function aboveLayout(row,widthPx=288,fontBasePx=20){
+function legacyResponsiveAboveLayout(row,widthPx=288,fontBasePx=20){
  const value=row?.presentation;
  const bodyWidthPx=Number.isFinite(Number(widthPx))&&Number(widthPx)>0?Math.max(96,Math.min(1600,Number(widthPx))):288;
  const base=Number.isFinite(Number(fontBasePx))&&Number(fontBasePx)>0?Math.max(10,Math.min(64,Number(fontBasePx))):20;
@@ -294,15 +345,24 @@ function aboveLayout(row,widthPx=288,fontBasePx=20){
  const formula=plain.map(line=>'\\text{'+tex(line)+'}');
  return{...contract,text:'$${\\tiny\\boxed{\\begin{array}{l}'+formula.join('\\\\')+'\\end{array}}}$$',lines:plain,lineCount:plain.length,wordSplitCandidate:body.wordSplitCandidate,kinsokuCandidate:header.kinsokuCandidate||body.kinsokuCandidate,truncated:Boolean(value.truncated)};
 }
+function aboveLayout(row,widthPx=288,fontBasePx=20){
+ const value=row?.presentation;
+ const text=value?.size==='thin'&&visibleContent(value)!=='name'&&!row.finalMarker?introText(value):'';
+ const width=Number(widthPx)||288,font=Number(fontBasePx)||20;
+ const cellBudget=Math.max(3,Math.floor(width/font));
+ const wrapped=text?responsiveWrap(text,cellBudget):{lines:[],wordSplitCandidate:false,kinsokuCandidate:false};
+ return {version:3,font:'paragraph',bodyWidthPx:width,fontBasePx:font,cellBudget,text,...wrapped,lineCount:wrapped.lines.length,truncated:Boolean(value?.truncated)};
+}
 function aboveText(row,widthPx,fontBasePx){return aboveLayout(row,widthPx,fontBasePx).text}
 function layoutContract(layout){
- if(!layout||layout.version!==2)return null;
+ if(!layout||![2,3].includes(layout.version))return null;
  const {version,font,cellBudget,bodyWidthPx,fontBasePx,maxFontPx,maxHeightPx,lineCount,wordSplitCandidate,kinsokuCandidate,truncated}=layout;
  return{version,font,cellBudget,bodyWidthPx,fontBasePx,maxFontPx,maxHeightPx,lineCount,wordSplitCandidate,kinsokuCandidate,truncated};
 }
 function matchesAboveText(row,literal,contract){
  if(typeof literal!=='string')return false;
- return literal===legacyAboveText(row)||literal===aboveText(row,contract?.bodyWidthPx,contract?.fontBasePx);
+ if(literal===aboveText(row))return true;
+ return contract?.version!==3&&(literal===legacyAboveText(row)||literal===legacyResponsiveAboveLayout(row,contract?.bodyWidthPx,contract?.fontBasePx).text);
 }
 function presentationContext(view){
  const element=view?.dom;let bodyWidthPx=288,fontBasePx=20,measured=false;
@@ -337,5 +397,5 @@ function mount(panel){
  };
  row.addEventListener('change',update);ranges.addEventListener('change',update);
 }
- page.__MUMEI_PROFILE_CARD_CONTENT__={readOptions,options,compose,visibleContent,label,aboveText,aboveLayout,legacyAboveText,matchesAboveText,layoutContract,presentationContext,mount,clean,excerpt,freeBody,profileIntro};
+ page.__MUMEI_PROFILE_CARD_CONTENT__={readOptions,options,compose,visibleContent,label,introText,aboveText,aboveLayout,legacyAboveText,legacyResponsiveAboveLayout,matchesAboveText,layoutContract,presentationContext,mount,clean,excerpt,freeBody,profileIntro,rememberListedArticle,clearListedArticles};
 })();

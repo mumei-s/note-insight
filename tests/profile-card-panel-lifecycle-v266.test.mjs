@@ -12,7 +12,7 @@ const RUN_KEY='mumei_profile_card_paster_run_v15:'+ARTICLE;
 const BACKUP_KEY='mumei_profile_card_run_backup_v253:'+ARTICLE;
 const pausedRun={articleKey:ARTICLE,gallery126:true,galleryAvailableOnly:true,stage:'images_building',paused:true,pauseStage:'images',count:125,rows:[],items:[],cardKeys:[],updatedAt:12345};
 
-async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
+async function runtime(t,path=files[0],{saved=pausedRun,prefs=null,mobile=false,position=null}={}){
  const dom=new JSDOM('<!doctype html><html><body><div id="note-editor" contenteditable="true" tabindex="0">Existing article text stays here.</div></body></html>',{url:'https://editor.note.com/notes/'+ARTICLE+'/edit',runScripts:'outside-only',pretendToBeVisual:true});
  const observers=[];
  t.after(()=>{for(const observer of observers)observer.disconnect();dom.window.close()});
@@ -22,6 +22,7 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  const NativeMutationObserver=w.MutationObserver;
  w.MutationObserver=class extends NativeMutationObserver{constructor(callback){super(callback);observers.push(this)}};
  w.unsafeWindow=w;
+ if(mobile)w.matchMedia=()=>({matches:true});
  w.setInterval=callback=>{const id=nextInterval++;intervals.set(id,callback);return id};
  w.clearInterval=id=>intervals.delete(id);
  w.GM_getValue=(key,fallback)=>gm.has(key)?gm.get(key):fallback;
@@ -31,8 +32,9 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  w.addEventListener('error',event=>{errors.push(event.error||event.message);event.preventDefault()});
  if(saved){w.localStorage.setItem(RUN_KEY,JSON.stringify(saved));gm.set(BACKUP_KEY,{value:structuredClone(saved),updatedAt:saved.updatedAt,deleted:false,articleKey:ARTICLE})}
  if(prefs)w.localStorage.setItem('mumei_profile_card_paster_v1',JSON.stringify(prefs));
+ if(position)w.localStorage.setItem('mumei_profile_card_paster_pos_v1',JSON.stringify(position));
  const code=readFileSync(path,'utf8');
- assert.match(code,/@version\s+2\.9\.7\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
+ assert.match(code,/@version\s+2\.9\.\d+\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
  w.eval(code);
  w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
  for(const callback of [...intervals.values()])callback();
@@ -56,6 +58,15 @@ test('a fresh panel defaults to 200 and the recent-200 preset preserves a saved 
  assert.equal(r.panel().querySelectorAll('[data-a="like200-preset"]').length,1);r.click(r.panel().querySelector('[data-a="like200-preset"]'));await r.flush();
  assert.equal(r.panel().querySelector('[data-mode]').value,'number');assert.equal(r.panel().querySelector('[data-count]').value,'200');
  assert.deepEqual(r.snapshots(),before);assert.equal(r.counts.network,0);
+});
+
+test('mobile panel and launcher use the left default even with an old right-side position',async t=>{
+ const r=await runtime(t,files[0],{mobile:true,prefs:{tiny:true},position:{left:620,top:150}});
+ const launcher=r.w.document.getElementById(PANEL+'-mini');
+ assert.equal(launcher.style.display,'flex');
+ assert.equal(launcher.style.left,'');
+ assert.equal(r.panel().style.left,'');
+ assert.match(r.panel().querySelector('style').textContent,/@media \(max-width:700px\), \(pointer:coarse\)[^\n]+-mini\{left:max\(14px,[^;]+;right:auto;/);
 });
 for(const path of files)test('normal controls remain live after repeated close and expansion: '+path,async t=>{
  const r=await runtime(t,path),initial=r.panel();

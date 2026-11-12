@@ -65,6 +65,22 @@ test('reading mode and fallback preserve the requested mode, and missing profile
  assert.equal(h.api.compose(row,note,profile,{content:'name'}).display,'name');
 });
 
+test('an empty body field and a matching public list can each supply the article text',t=>{
+ const h=helper();t.after(()=>h.dom.window.close());
+ const requested={content:'summary'};
+ const summary=h.api.compose(row,{...note,body:'',body_html:freeBody},profile,requested);
+ assert.equal(summary.display,'summary');
+ assert.match(summary.text,/3日後/);
+ h.api.rememberListedArticle(note);
+ const detail={...note,body:'',description:'冒頭の案内です。'};
+ assert.equal(h.api.compose(row,detail,profile,requested).text,summary.text);
+ assert.match(h.api.compose(row,detail,profile,{content:'lead'}).text,/^週末の記録/);
+ assert.equal(h.api.compose(row,{...detail,price:500},profile,requested).display,'lead');
+ assert.equal(h.api.compose(row,{...detail,isDraft:true},profile,requested).display,'profile');
+ h.api.clearListedArticles();
+ assert.equal(h.api.compose(row,detail,profile,requested).display,'lead');
+});
+
 test('a public lead is not promoted to summary, and paid or membership bodies respect the free boundary',t=>{
  const h=helper();t.after(()=>h.dom.window.close());
  for(const restriction of [{price:980},{price:null},{price:undefined},{is_limited:true},{isLimited:true},{is_membership_only:true},{isMembershipOnly:true},{is_trial:true},{can_read:false},{paywall:{context:{is_membership_connected:true}}}]){
@@ -94,6 +110,10 @@ for(const flow of ['normal','history'])for(const size of ['thin','medium'])compi
  const localStorageMap=new Map([[pref,JSON.stringify({size,content:'summary'})]]);
  const r=await runtime({count:4,localStorageMap,requestMutator:(url,payload)=>{
   const path=new URL(url).pathname;
+  for(const list of [payload.data?.contents,payload.data?.notes,payload.data?.notes?.contents]){
+   if(!Array.isArray(list))continue;
+   for(const item of list)if(/n00000000000[34]/.test(item.key))Object.assign(item,{body:'',description:''});
+  }
   if(path.endsWith('/notes/n000000000001'))Object.assign(payload.data,{name:note.name,body:freeBody,paywall:note.paywall});
   if(path.endsWith('/notes/n000000000002'))Object.assign(payload.data,{body:'',description:'冒頭の紹介です。'});
   if(/\/notes\/n00000000000[34]$/.test(path))Object.assign(payload.data,{body:'',description:''});
@@ -109,7 +129,7 @@ for(const flow of ['normal','history'])for(const size of ['thin','medium'])compi
  assert.equal(run.items.length,5);
  assert.deepEqual(Array.from(run.items,item=>item.url),Array.from(run.rows,item=>item.url));
  assert.ok(r.state.imageDimensions.every(image=>image.height===(size==='medium'?360:140)));
- assert.doesNotMatch(r.view.state.doc.textContent,/抜粋|無料公開本文を取得できません|人目/);
+ assert.doesNotMatch(r.view.state.doc.textContent,/抜粋|無料公開本文を取得できません|人目|◇ (?:プロフィール|読み始め|記事の要約)|\\boxed/);
  await r.core.createCardsAtTap();
  assert.equal(r.editor.readRun().stage,'complete',r.state.statuses.at(-1)?.text);
  assert.deepEqual(r.state.cards,Array.from(run.rows,item=>item.url));

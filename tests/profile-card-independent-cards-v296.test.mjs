@@ -37,6 +37,29 @@ test('image-independent notification pause and resume convert only the remaining
  await r.core.createCardsAtTap();cardsComplete(r,5);assert.equal(r.state.nativeCardRequests.length,5);assert.equal(new Set(r.state.nativeCardRequests).size,5);
 });
 
+for(const kind of ['normal','history'])test(kind+' saves cards for the confirmed image prefix, then resumes both without duplicates',async t=>{
+ const r=await runtime({count:4});t.after(()=>r.close());
+ r.state.pauseAt=2;
+ const paused=await r[kind]();
+ assert.equal(paused.items.length,2);
+ assert.match(r.state.statuses.at(-1).text,/②で貼り付け済み分のカード/);
+ await r.core.createCardsAtTap();
+ const partial=r.editor.readRun();
+ assert.equal(partial.stage,'images_building');
+ assert.equal(partial.draftSaveState,'confirmed');
+ assert.equal(partial.partialCardCount,2);
+ assert.equal(partial.rows.length,5);
+ assert.deepEqual(r.state.cards,Array.from(paused.rows.slice(0,2),row=>row.url));
+ await r.core.createCardsAtTap();
+ assert.equal(r.state.nativeCardRequests.length,2);
+ const resumed=await r.reload();t.after(()=>resumed.close());
+ await resumed.editor.patch('resumeFixed300()');
+ assert.equal(blocks(resumed,'image').length,5,resumed.state.statuses.at(-1)?.text);
+ await resumed.core.createCardsAtTap();
+ cardsComplete(resumed,5);
+ assert.equal(new Set(resumed.state.nativeCardRequests).size,5);
+});
+
 test('a different draft plan cannot use the relaxed image-count gate',async t=>{
  const r=await runtime({count:2});t.after(()=>r.close());await r.normal();r.editor.writeRun({...r.editor.readRun(),articleKey:'nffffffffffff'});
  const doc=r.doc();await r.core.createCardsAtTap();assert.deepEqual(r.doc(),doc);assert.equal(r.state.nativeCardRequests.length,0);assert.equal(r.state.statuses.at(-1).bad,true);

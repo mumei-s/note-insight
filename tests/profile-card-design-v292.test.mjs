@@ -73,7 +73,7 @@ test('medium content uses reference horizontal layout and shortens text without 
   await api.makeFile(input);
   assert.equal(canvases.at(-1).width,860);assert.equal(canvases.at(-1).height,360);
   assert.equal(JSON.stringify(input.presentation),before);
-  assert.ok(paint.some(command=>command[0]==='fillText'&&command[1]==='プロフィール'));
+  assert.ok(!paint.some(command=>command[0]==='fillText'&&command[1]==='プロフィール'));
   assert.ok(paint.some(command=>command[0]==='fillText'&&command[1].endsWith('…')));
   assert.equal(input.presentationRender.fontSize,20);assert.equal(input.presentationRender.excerpt,true);
   const images=paint.filter(command=>command[0]==='drawImage');

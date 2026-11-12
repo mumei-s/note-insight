@@ -169,12 +169,10 @@ function drawMediumThinCard(row,avatar,thumb,theme){
   finishThinContrast(canvas,row,{avatar:[ax,ay,ar],thumb:[ix,iy,iw,ih],shape:'circle',radius:10},theme);
   return canvas;
  }
- const sourceText=String(row.presentation?.text||''),bodyTop=Math.max(78,23+nameLines.length*28+14);
- const label=row.presentation?.version===2?contentApi.label(row.presentation):content==='profile'?'プロフィール':'読み始め';
+ const sourceText=String(row.presentation?.text||'').replace(/…（抜粋）$/u,'…'),bodyTop=Math.max(78,23+nameLines.length*28+14);
  ctx.fillStyle=theme.bg;rounded(ctx,tx-4,bodyTop-4,tw+8,340-bodyTop,6);ctx.fill();
- ctx.fillStyle=theme.muted;ctx.font='700 15px system-ui,-apple-system,sans-serif';ctx.fillText(label,tx,bodyTop);
  ctx.fillStyle=theme.ink;ctx.font='500 20px system-ui,-apple-system,sans-serif';
- const textTop=bodyTop+25,lineHeight=28,maxLines=Math.max(1,Math.floor((333-textTop)/lineHeight)),allLines=mediumTextLines(ctx,sourceText,tw),truncated=allLines.length>maxLines,bodyLines=allLines.slice(0,maxLines);
+ const textTop=bodyTop,lineHeight=28,maxLines=Math.max(1,Math.floor((333-textTop)/lineHeight)),allLines=mediumTextLines(ctx,sourceText,tw),truncated=allLines.length>maxLines,bodyLines=allLines.slice(0,maxLines);
  if(truncated&&bodyLines.length){let parts=mediumTextParts(bodyLines.at(-1));const suffix='…';while(parts.length&&ctx.measureText(parts.join('')+suffix).width>tw)parts.pop();bodyLines[bodyLines.length-1]=parts.join('')+suffix}
  bodyLines.forEach((line,index)=>ctx.fillText(line,tx,textTop+index*lineHeight));
  row.presentationRender={width:W,height:360,fontSize:20,content,excerpt:truncated||content!=='name',nameTruncated,sourceLength:mediumTextParts(sourceText).length};

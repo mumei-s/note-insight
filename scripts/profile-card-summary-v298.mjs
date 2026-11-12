@@ -15,7 +15,7 @@ function summaryNeedsRefresh(row){
 }
 async function summaryRefreshRows(rows,completed=0,ownedTexts={},selection=null){
  const outdated=row=>selection
-  ?row.presentation?.version!==2||row.presentation.content!==selection.content||row.presentation.size!==selection.size
+  ?row.presentation?.version!==3||row.presentation.content!==selection.content||row.presentation.size!==selection.size
   :legacySummary(row);
  const canRefresh=(row,index)=>index>=completed&&outdated(row)&&!ownedTexts[norm(row.url)];
  if(!rows.some(canRefresh))return rows;
@@ -50,6 +50,7 @@ async function summaryRepairCompleted(view,run){
  const completed=new Set((run.items||[]).map(item=>norm(item.url)));
  const first=run.rows.findIndex(row=>completed.has(norm(row.url))&&summaryNeedsRefresh(row));
  if(first<0)return run;
+ contentApi.clearListedArticles();
  setStatus('保存済みの要約エラーを再取得中｜完成済みの画像も作り直します');
  const before=view.state.doc,signature=JSON.stringify({rows:run.rows,items:run.items,cardKeys:run.cardKeys});
  const rows=await summaryRefreshRows(run.rows,first);

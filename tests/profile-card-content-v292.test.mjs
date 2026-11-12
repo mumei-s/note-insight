@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {createRequire} from 'node:module';
 import {JSDOM} from 'jsdom';
 import {contentRuntime,transformCoreContent,transformEditorContent} from '../scripts/profile-card-content-v292.mjs';
 import {readFileSync} from 'node:fs';
 import {instrumentCore,instrumentEditor} from '../scripts/profile-card-quality-instrument.mjs';
 import {runtime,dependencies,baselineCode} from './fixtures/profile-card-quality-runtime.mjs';
-const require=createRequire(import.meta.url);
 function helper(){const dom=new JSDOM(''),store=new Map(),page={};vm.runInNewContext(contentRuntime,{window:page,document:dom.window.document,DOMParser:dom.window.DOMParser,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>store.set(key,value)}});return{api:page.__MUMEI_PROFILE_CARD_CONTENT__,dom,store}}
 const row={urlname:'person_a',key:'n000000000001',url:'https://note.com/person_a/n/n000000000001',creator:'名前✨'};
 const source={...row,name:'タイトルは要約として使わない',user:{urlname:'person_a'}};
@@ -39,11 +37,9 @@ test('missing sources remain unverified instead of copying target identifiers in
  const h=helper(),profile=h.api.compose(row,source,{profile:'内容あり'},{content:'profile'}),summary=h.api.compose(row,{price:0,body:'内容あり'},{},{content:'summary'});
  assert.equal(profile.source.account,'');assert.equal(summary.source.account,'');assert.equal(summary.source.key,'');assert.equal(summary.source.url,'');h.dom.window.close();
 });
-test('formatted above copy escapes literal formula text and does not repeat the image name',()=>{
+test('above copy preserves literal punctuation as ordinary text with no generated label or name',()=>{
  const h=helper(),value=h.api.compose(row,source,{urlname:'person_a',profile:'A & B #タグ | 100% $ {例} \\ 元の文字'},{content:'profile'}),text=h.api.aboveText({...row,presentation:value});
- assert.ok(text.includes('\\boxed'));assert.ok(text.includes('\\&'));assert.ok(text.includes('\\#'));assert.ok(text.includes('\\%'));assert.ok(!text.includes('名前✨'));
- let katex;try{katex=require(process.env.KATEX_TEST_MODULE||'katex')}catch{}
- if(katex)assert.doesNotThrow(()=>katex.renderToString(text.slice(2,-2),{throwOnError:true,strict:'ignore'}));h.dom.window.close();
+ assert.equal(text,'A & B #タグ | 100% $ {例} \\ 元の文字');h.dom.window.close();
 });
 test('build adapters preserve all independently asserted quality integration markers',()=>{
  for(const [file,transform,instrument] of [['public/note-profile-card-paster-core-v232.js',transformCoreContent,instrumentCore],['public/note-profile-card-paster-v22.user.js',transformEditorContent,instrumentEditor]])assert.doesNotThrow(()=>new vm.Script(instrument(transform(readFileSync(file,'utf8')))));

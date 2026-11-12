@@ -10,6 +10,7 @@ const adapters=`
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
 let contentOptions=contentApi?.readOptions?.()||{size:'thin',content:'name'};
 function composePresentation(row,note,profile){return contentOptions?contentApi?.compose?.(row,note,profile,contentOptions):undefined}
+function rememberPresentationArticle(note){if(contentOptions&&contentOptions.content!=='name')contentApi?.rememberListedArticle?.(note)}
 `;
 const scopedInsert=`
 function insertPresentationAt(view,row,pos){
@@ -50,10 +51,11 @@ function presentationActivityHits(view,run){
 export function transformCoreContent(source){
  source=once(source,"const STATUS='mumei-profile-card-paster-status-v1';", "const STATUS='mumei-profile-card-paster-status-v1';"+adapters);
  source=once(source,' bindPanelInputEvents(p);',' bindPanelInputEvents(p);\n contentApi?.mount?.(p);');
+ source=changeFunction(source,'articleFromRaw',part=>once(part,' if(!url)return null;',' if(!url)return null;\n rememberPresentationArticle(note);'));
  source=changeFunction(source,'creatorProfile',part=>once(part,'   creator:String(u.nickname||u.name||id).trim(),',"   profileText:contentOptions?.content==='name'?'':contentApi?.profileIntro?.(u).text||'',presentationAccount:String(u.urlname||u.urlName||u.url_name||'').toLowerCase(),\n   creator:String(u.nickname||u.name||id).trim(),"));
  source=changeFunction(source,'enrich',part=>once(part,'  ...row,',"  ...row,profileText:String(profile?.profileText||''),presentation:composePresentation(row,note,profile),"));
  source=changeFunction(source,'createImageList',part=>{
-  part=once(part,'  const input=inputValues();','  const input=inputValues();\n  contentOptions=contentApi?.readOptions?.()||contentOptions;\n  const showCreatorRanges=contentOptions?.showCreatorRanges===true;');
+  part=once(part,'  const input=inputValues();','  const input=inputValues();\n  contentOptions=contentApi?.readOptions?.()||contentOptions;\n  contentApi?.clearListedArticles?.();\n  const showCreatorRanges=contentOptions?.showCreatorRanges===true;');
   part=once(part,'pauseStage:null,special:Boolean(special)','pauseStage:null,showCreatorRanges,special:Boolean(special)');
   part=once(part,'｜ランダム極薄50種｜①画像一覧','｜①画像一覧');
   return once(part,`   if(special){
@@ -92,6 +94,7 @@ function sectionHeadingText(groupIndex,count=Infinity,special=true){
 }
 export function transformEditorContent(source){
  source=once(source,"const STATUS='mumei-profile-card-paster-status-v1';", "const STATUS='mumei-profile-card-paster-status-v1';"+adapters);
+ source=changeFunction(source,'articleFromRaw',part=>once(part,' if(!url)return null;',' if(!url)return null;\n rememberPresentationArticle(note);'));
  source=changeFunction(source,'preparePerson',part=>{
   part=once(part,"   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id))",`   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)).catch(error=>{
     if(stopRequested)throw error;
@@ -100,6 +103,7 @@ export function transformEditorContent(source){
   return once(part,'   ...latest,','   ...latest,presentation:composePresentation(latest,note,profile),');
  });
  source=changeFunction(source,'buildRows',part=>{
+  part=once(part,'async function buildRows(target=300){','async function buildRows(target=300){\n contentApi?.clearListedArticles?.();');
   part=once(part,' const compatible=saved?.signature===signature||saved?.signature===previousSignature;',` const compatible=saved?.signature===signature||saved?.signature===previousSignature;
  if(compatible){
   if(Object.prototype.hasOwnProperty.call(saved,'presentationOptions'))contentOptions=saved.presentationOptions===null?null:contentApi?.options?.(saved.presentationOptions)||saved.presentationOptions;
