@@ -256,8 +256,8 @@ function mountOwnerBoostPanel(){
     if(b.hasAttribute('data-real')&&x)return location.assign(urlOf(x));
     if(b.hasAttribute('data-like')){void like();return}
     if(b.hasAttribute('data-follow')&&x){void boostFollowChange(x.urlname,message).then(()=>void nativeSyncFollow(x.urlname,true));return}
-    if(b.hasAttribute('data-queue')){localStorage.setItem('noteBoostOwnerPendingQueueV693','1');location.assign(APP_URL);return}
-    if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL);return}
+    if(b.hasAttribute('data-queue')){localStorage.setItem('noteBoostOwnerPendingQueueV693','1');location.assign(APP_URL+'&boost_view=queue');return}
+    if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL+'&boost_view=mag');return}
     if(b.hasAttribute('data-fav-person')&&x){const f=favs(),id=String(x.urlname||'').toLowerCase();f.creators=[{id,name:x.name||id},...f.creators.filter(y=>y.id!==id)].slice(0,200);write(FAV,f);message('☆ 人物を保存しました');drawFavorites();return}
     const type=b.dataset.do||b.dataset.del,idx=Number(b.dataset.i);
     if(!type||!Number.isInteger(idx))return;
@@ -887,6 +887,16 @@ $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('k
 
 try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(boostPage()>0){state.index=(boostPage()-1)*BOOST_PAGE_SIZE;saveState();void render()}else{location.assign('https://note.com/');return}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
-async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}if(localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1'){localStorage.removeItem('noteBoostOwnerPendingQueueV693');openQueue()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');
+const wantMag=url.searchParams.get('boost_view')==='mag'||localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1';
+const wantQueue=url.searchParams.get('boost_view')==='queue'||localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1';
+localStorage.removeItem('noteBoostOwnerPendingMagazineV681');
+localStorage.removeItem('noteBoostOwnerPendingQueueV693');
+if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}
+if(wantMag){if(state.queue.length)void openMags();else{$('#magBody').textContent='先に巡回対象を読み込んでください';showModal('magModal')}}
+else if(wantQueue)openQueue()}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+// On transfer from the native panel, show the target view immediately rather than flashing BOOST home.
+if(url.searchParams.get('boost_view')==='mag'){showModal('magModal');$('#magBody').textContent='マガジンを読み込み中…'}
+if(url.searchParams.get('boost_view')==='queue'){showModal('queueModal');$('#queueBody').textContent='記事一覧を読み込み中…'}
 void diagnose();
 })();
