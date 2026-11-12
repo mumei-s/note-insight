@@ -824,7 +824,44 @@ function hydrateCreatorCovers(id,articles){
     }catch{return false}
   });
 }
-async function openCreator(){const x=current();if(!x)return;showModal('creatorModal');$('#creatorBody').innerHTML='記事一覧を読み込み中…';try{const p=await creatorProfile(x.urlname),r=await creatorContents(x.urlname,1),arts=(r.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);$('#creatorBody').innerHTML=`<div class="creator"><img id="creatorProfileGo" class="tap" src="${esc(p.icon||'')}"><div><div class="name">${esc(p.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${p.followers||'—'}・記事 ${p.articleCount||arts.length||'—'}</div></div></div><div class="bio">${esc(p.bio||'')}</div><div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧</div>${arts.map(a=>`<div class="listitem"><div class="listrow" data-note-key="${esc(a.key)}">${boostArticleThumbMarkup(a)}<div><b>${esc(a.title)}</b><div class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${Number(a.likeCount||0)}${a.liked===true?'・💗スキ済み':''}</div><button data-open="https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(a.key)}" style="margin-top:6px">実記事</button></div></div></div>`).join('')||'<div class="empty">記事を取得できませんでした</div>'}`;$('#creatorProfileGo').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);for(const b of $('#creatorBody [data-open]'))b.onclick=()=>goOut(b.dataset.open);void hydrateCreatorCovers(x.urlname,arts)}catch(e){$('#creatorBody').textContent=formatError(e)}}
+async function openCreator(){
+  const x=current();if(!x)return;
+  showModal('creatorModal');
+  const body=$('#creatorBody');body.textContent='記事一覧を読み込み中…';
+  try{
+    const [profile,resp]=await Promise.all([creatorProfile(x.urlname),creatorContents(x.urlname,1)]);
+    const articles=(resp.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);
+    const PAGE_SIZE=10;
+    let page=0;
+    const draw=()=>{
+      if(!body.isConnected||!$('#creatorModal').classList.contains('show'))return;
+      const count=Math.max(1,Math.ceil(articles.length/PAGE_SIZE));
+      page=Math.max(0,Math.min(page,count-1));
+      const slice=articles.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
+      const nav=(side)=>'<div class="bar" style="align-items:center;justify-content:space-between;margin:8px 0">'+
+        '<button type="button" data-creator-prev '+(page===0?'disabled':'')+'>← 前の10件</button>'+
+        '<span class="meta">'+(page+1)+'/'+count+' ページ</span>'+
+        '<button type="button" data-creator-next '+(page>=count-1?'disabled':'')+'>次の10件 →</button></div>';
+      body.innerHTML='<div class="creator"><img id="creatorProfileGo" class="tap" src="'+esc(profile.icon||'')+'">'+
+        '<div><div class="name">'+esc(profile.name||x.urlname)+'</div><div class="id">@'+esc(x.urlname)+'</div>'+
+        '<div class="stats">フォロワー '+(profile.followers||'—')+'・記事 '+(profile.articleCount||articles.length||'—')+'</div></div></div>'+
+        '<div class="bio">'+esc(profile.bio||'')+'</div>'+
+        '<div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧（10件ずつ）</div>'+nav('top')+
+        (slice.map(a=>'<div class="listitem"><div class="listrow" data-note-key="'+esc(a.key)+'">'+
+          boostArticleThumbMarkup(a)+'<div><b>'+esc(a.title)+'</b><div class="meta">'+
+          (a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):'')+'・♡'+Number(a.likeCount||0)+
+          (a.liked===true?'・💗スキ済み':'')+'</div><button type="button" data-open="https://note.com/'+
+          encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(a.key)+'" style="margin-top:6px">実記事</button>'+
+          '</div></div></div>').join('')||'<div class="empty">記事を取得できませんでした</div>')+nav('bottom');
+      const profileGo=$('#creatorProfileGo');if(profileGo)profileGo.onclick=()=>goOut('https://note.com/'+encodeURIComponent(x.urlname));
+      for(const btn of body.querySelectorAll('[data-open]'))btn.onclick=()=>goOut(btn.dataset.open);
+      for(const btn of body.querySelectorAll('[data-creator-prev]'))btn.onclick=()=>{if(page>0){page--;body.scrollTop=0;draw()}};
+      for(const btn of body.querySelectorAll('[data-creator-next]'))btn.onclick=()=>{if((page+1)*PAGE_SIZE<articles.length){page++;body.scrollTop=0;draw()}};
+      void hydrateCreatorCovers(x.urlname,slice);
+    };
+    draw();
+  }catch(e){body.textContent=formatError(e)}
+}
 function magAdded(m,bel){for(const k of ['is_added','isAdded','has_note','hasNote','included','is_included','isIncluded','contains_note','containsNote','is_note_added','isNoteAdded','selected'])if(typeof m?.[k]==='boolean')return m[k];return bel.has(String(m?.key||''))}
 function magThumb(m){for(const x of [m?.image_url,m?.imageUrl,m?.thumbnail_url,typeof m?.thumbnail==='string'?m.thumbnail:m?.thumbnail?.url,typeof m?.eyecatch==='string'?m.eyecatch:m?.eyecatch?.url,m?.cover_image_url,m?.coverImage,m?.cover_image?.url,typeof m?.image==='string'?m.image:m?.image?.url,m?.icon_url,m?.iconUrl,m?.icon?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
 function magUrl(m,key){const raw=m?.url||m?.magazine_url||m?.magazineUrl;if(raw)return raw;const owner=m?.user?.urlname||m?.creator?.urlname||m?.owner?.urlname||state.me||'';return owner?`https://note.com/${encodeURIComponent(owner)}/m/${encodeURIComponent(key)}`:''}
@@ -843,7 +880,7 @@ $('#next').onclick=async()=>{const p=boostPage();if((p+1)*BOOST_PAGE_SIZE<state.
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
 boostPrefsForm($('#boostSettingsUI'),()=>{refreshLimits();void render()});
 $('#closeBoostSettings').onclick=()=>{$('.more-controls').open=false;$('.more-controls summary')?.focus()};
-$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(state.index>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
+$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(boostPage()>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
