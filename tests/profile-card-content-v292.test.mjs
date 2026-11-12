@@ -98,6 +98,36 @@ compiled('explicit history restart clears presentation ownership and preserves i
  await r.c.restartContentHistory();const run=r.editor.readRun();assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(run.items.length,2);assert.equal(run.activityTexts.length,1);assert.equal(Object.keys(run.presentationTexts).length,1);assert.equal(r.view.state.doc.textContent.split(text).length-1,2);
  await r.core.deleteAllGenerated({save:false});assert.equal(r.view.state.doc.textContent,'元の文章です。挿入位置'+text);r.close();
 });
+compiled('starting a selected day replaces confirmed output even when one old introduction was edited',async t=>{
+ const pref='mumei_profile_card_presentation_v292';
+ const local=new Map([[pref,JSON.stringify({size:'thin',content:'profile'})]]);
+ const r=await runtime({count:3,localStorageMap:local});t.after(()=>r.close());
+ const old=await r.history(),url=old.rows[0].url,pos=old.presentationPositions[url],intro=r.view.state.doc.nodeAt(pos);
+ const changed=intro.textContent.slice(0,-1),manual=old.activityTexts[1];
+ r.view.dispatch(r.view.state.tr.replaceWith(pos,pos+intro.nodeSize,r.para(changed)));
+ const unlinked=r.schema.nodes.image.create({id:'old-unlinked',src:'https://assets.st-note.com/old-unlinked.png'});
+ r.view.dispatch(r.view.state.tr.insert(r.view.state.doc.content.size,[r.para(manual),unlinked]));
+ const historyFilter={fromDate:'2026-11-11',toDate:'2026-11-11',articleKey:'',timezone:'Asia/Tokyo'};
+ r.c.options={mode:'number',count:3,target:3,historyFilter};
+ r.c.snapshot={at:2,historyFilter,people:r.people.slice(0,3).map(person=>({...person,likedAt:'2026-11-11T01:00:00Z'}))};
+ r.editor.patch(`const beforeRestartOptions=historyOptions;
+  historyOptions=run=>run?beforeRestartOptions(run):options;
+  prepareLikesHistoryExport=async()=>GM_setValue(BRIDGE_KEY,snapshot);
+ `);
+ local.set(pref,JSON.stringify({size:'thin',content:'name'}));
+ await r.editor.patch('restartFixed300()');
+ const run=r.editor.readRun(),blocks=[];
+ r.view.state.doc.forEach(node=>blocks.push(node));
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.deepEqual(JSON.parse(JSON.stringify(run.historyFilter)),historyFilter);
+ assert.equal(run.items.length,4);
+ assert.deepEqual(blocks.filter(node=>node.type.name==='image'&&node.attrs.link).map(node=>node.attrs.link),Array.from(run.rows,row=>row.url));
+ assert.ok(!run.items.some(item=>old.items.some(previous=>previous.id===item.id)));
+ assert.equal(blocks.filter(node=>node.type.name==='paragraph'&&node.textContent===changed).length,1);
+ assert.equal(blocks.filter(node=>node.type.name==='paragraph'&&node.textContent===manual).length,1);
+ assert.ok(blocks.some(node=>node.eq(unlinked)));
+ assert.ok(r.view.state.doc.textContent.includes('元の文章です。'));
+});
 compiled('compatible history acquisition checkpoint freezes selected output before a run exists',async()=>{
  const local=new Map([['mumei_profile_card_presentation_v292',JSON.stringify({size:'thin',content:'profile'})]]),r=await runtime({count:8,localStorageMap:local});
  r.editor.patch('globalThis.originalContentWritePrep=writePrep;writePrep=value=>{originalContentWritePrep(value);if(value.rows?.length===6)stopRequested=true};');await r.history();assert.equal(r.editor.readRun(),null);const saved=JSON.parse(local.get('mumei_profile_like300_fix_v230:naaaaaaaaaaaa'));assert.equal(saved.rows.length,6);assert.equal(saved.presentationOptions.content,'profile');

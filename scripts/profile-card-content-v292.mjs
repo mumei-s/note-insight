@@ -48,6 +48,45 @@ function presentationActivityHits(view,run){
  return result;
 }
 `;
+const clearHistoryPaste=String.raw`function clearCurrentPaste(view,run){
+ if(!run?.likesHistoryFix230)return null;
+ const before=view.state.doc,blocks=[],positions=new Map(),hits=new Map();
+ before.forEach((node,pos,index)=>{positions.set(pos,index);blocks.push({node,pos})});
+ const rows=new Map((run.rows||[]).map(row=>[norm(row.url),row]));
+ const texts=new Set(run.activityTexts||[]),headings=new Set(run.sectionHeadings||[]);
+ const dividerUrls=new Set((run.dividerUrls||[]).map(norm));
+ const remember=hit=>hits.set(hit.pos,hit);
+ for(const image of ownedImagesForRun(view,run)){
+  const index=positions.get(image.pos),url=norm(image.node.attrs?.link),row=rows.get(url);
+  if(index===undefined||!row)continue;
+  remember(image);
+  const intro=blocks[index-1],saved=run.presentationTexts?.[url]??(row.presentation||row.finalMarker?'':activityText(row));
+  let heading=intro;
+  if(saved&&texts.has(saved)&&intro?.node.type?.name==='paragraph'){
+   const actual=intro.node.textBetween(0,intro.node.content.size,'',node=>/^hard_?break$/i.test(node.type?.name)?'\n':'');
+   if(actual===saved){remember(intro);heading=blocks[index-2];}
+  }
+  const expectedHeading=row.finalMarker?'最後に｜実績の算数':(Number(row.index)-1)%10===0?headingText((row.index-1)/10,run.rows.length-1):'';
+  if(expectedHeading&&headings.has(expectedHeading)&&heading?.node.type?.name==='heading'&&heading.node.textContent===expectedHeading)remember(heading);
+  const divider=blocks[index+1];
+  if(dividerUrls.has(url)&&isDivider(view,divider?.node))remember(divider);
+ }
+ const imageAnchor=hits.size?Math.min(...hits.keys()):null;
+ const keys=new Set((run.cardKeys||[]).map(card=>typeof card==='string'?card:String(card.key||'')).filter(Boolean));
+ const baseline=new Set(run.cardBaselineKeys||[]);
+ for(const block of blocks)if(block.node.type?.name==='embed'){
+  const key=cardKey(block);
+  if(keys.has(key)&&!baseline.has(key))remember(block);
+ }
+ if(!hits.size)return null;
+ const transaction=view.state.tr;
+ for(const hit of [...hits.values()].sort((a,b)=>b.pos-a.pos))transaction.delete(hit.pos,hit.pos+hit.node.nodeSize);
+ const mapped=imageAnchor===null?null:transaction.mapping.map(imageAnchor,-1);
+ view.dispatch(transaction);
+ if(view.state.doc.eq(before))throw new Error('前回分の入れ替えを確認できません。本文は保持しています');
+ return mapped===null?null:Math.min(mapped,view.state.doc.content.size);
+}
+`;
 export function transformCoreContent(source){
  source=once(source,"const STATUS='mumei-profile-card-paster-status-v1';", "const STATUS='mumei-profile-card-paster-status-v1';"+adapters);
  source=once(source,' bindPanelInputEvents(p);',' bindPanelInputEvents(p);\n contentApi?.mount?.(p);');
@@ -126,10 +165,11 @@ export function transformEditorContent(source){
   return once(part,'  if(i%10===0&&!findHeading(', '  if(showCreatorRanges&&i%10===0&&!findHeading(');
  });
  source=changeFunction(source,'activityText',part=>once(part,'function activityText(row){','function activityText(row){\n if(row.presentation)return contentApi?.aboveText?.(row)||\'\';'));
- source=changeFunction(source,'clearCurrentPaste',part=>{
-  part=once(part,' if(!run?.likesHistoryFix230)return 0;',' if(!run?.likesHistoryFix230)return 0;\n const presentation=presentationActivityHits(view,run),presentationPositions=presentation?new Set(presentation.map(hit=>hit.pos)):null;');
-  return once(part,"  if(node.type?.name==='paragraph'&&texts.has(String(node.textContent||'')))hits.push({node,pos});","  if(node.type?.name==='paragraph'&&texts.has(String(node.textContent||''))&&(!presentationPositions||presentationPositions.has(pos)))hits.push({node,pos});");
+ source=changeFunction(source,'clearCurrentPaste',()=>clearHistoryPaste);
+ source=changeFunction(source,'restartFixed300',part=>{
+  part=once(part,'   clearCurrentPaste(view,run);','   const imageAnchorPos=clearCurrentPaste(view,run)??cardAnchorFromSelection(view);');
+  part=once(part,'imageAnchorPos:Math.min(view.state.doc.content.size,Math.max(0,Number(run.imageAnchorPos)||0))','imageAnchorPos');
+  return once(part,'sectionHeadings:[],activityTexts:[],dividerUrls:[]','sectionHeadings:[],activityTexts:[],presentationTexts:{},presentationPositions:{},presentationLayouts:{},dividerUrls:[]');
  });
- source=changeFunction(source,'restartFixed300',part=>once(part,'sectionHeadings:[],activityTexts:[],dividerUrls:[]','sectionHeadings:[],activityTexts:[],presentationTexts:{},presentationPositions:{},presentationLayouts:{},dividerUrls:[]'));
  return once(source,'function insertHeadingAt(view,text,pos){',coreInsert+'\nfunction insertHeadingAt(view,text,pos){');
 }
