@@ -44,13 +44,19 @@ export async function runtime({baseline=false,count=3,record=true,reverse=false,
  const people=Array.from({length:state.targetCount+10},(_,i)=>person(i));if(!gm.has('mumei_profile_card_likes_300_v2'))gm.set('mumei_profile_card_likes_300_v2',{at:100,people});
  function note(id){const n=id==='fuku444'?-1:Number(id.split('_').at(-1)),k=n<0?'nb4f6934381e9':key(n);return{key:k,noteUrl:'https://note.com/'+id+'/n/'+k,name:'AIと暮らしの記事 '+n,body:'ワーママとして会社勤務と子育て。育児日記を書きます。',price:0,hashtags:['自己紹介','はじめてのnote','ワーママ','育児日記',...(sourceFixtures?Object.entries(sourceFixtures.tags||{}).filter(([,values])=>values.some(value=>typeof value==='number'?value===n:typeof value==='string'?value===id:value?.urlname===id)).map(([tag])=>tag):['fixture'])],publishAt:'2025-01-01T00:00:00Z',eyecatch:n===noThumbIndex?null:{url:'https://assets.st-note.com/thumb'+n+'.png'},eyecatch_url:n===noThumbIndex?'':'https://assets.st-note.com/thumb'+n+'.png',user:{urlname:id,key:'key-'+n,nickname:'作者🌸'+n,profileImageUrl:n===noIconIndex?'':'https://assets.st-note.com/icon'+n+'.png'}}}
  const fixturePeople=values=>(values||[]).map(value=>typeof value==='number'?person(value):typeof value==='string'?{...person(Number(value.split('_').at(-1))),urlname:value}:value);
- const requestKind=url=>{const path=new URL(url).pathname;return path.includes('/searches')?'search':path.includes('/magazines/')?'magazine':path.endsWith('/likes')?'likes':path.endsWith('/contents')?'creatorContents':path.includes('/api/v2/creators/')?'profile':path.includes('/api/v3/notes/')?'note':'other'};
+ const requestKind=url=>{const path=new URL(url).pathname;return (path.includes('/searches')||path.includes('/hashtags/'))?'search':path.includes('/magazines/')?'magazine':path.endsWith('/likes')?'likes':path.endsWith('/contents')?'creatorContents':path.includes('/api/v2/creators/')?'profile':path.includes('/api/v3/notes/')?'note':'other'};
  async function requestPayload(url){
   state.requests.push(url);const u=new URL(url),creator=u.pathname.match(/^\/api\/v2\/creators\/([^/]+)(\/contents)?$/),article=u.pathname.match(/^\/api\/v3\/notes\/(n[a-f0-9]+)$/);
   if(reverse){const tail=Number((creator?.[1]||'').split('_').at(-1));for(let i=0;i<(6-(tail%6||0));i++)await Promise.resolve()}
   state.returned.push(url);
   if(creator){const id=creator[1],n=id==='fuku444'?-1:Number(id.split('_').at(-1));if(creator[2])return{data:{contents:u.searchParams.get('page')==='2'||n===noArticleIndex?[]:[note(id)],totalCount:n===noArticleIndex?0:1,isLastPage:true}};return{data:{creator:{urlname:id,nickname:'名前変更✨'+id,profile:'原文です。\n自然な折り返しと手動改行を区別します。AIも美容も書きます。',profileImageUrl:n===noIconIndex?'':'https://assets.st-note.com/icon'+id+'.png',noteCount:n===noArticleIndex?0:1}}}}
   if(article){if(article[1]==='n1b6e30eb9e41')return{data:{body:'https://note.com/previous_fixture/n/nffffffffffff'}};const n=article[1]==='nb4f6934381e9'?-1:parseInt(article[1].slice(1),16)-1-state.keyOffset;return{data:note(n<0?'fuku444':state.fixturePrefix+n)}}
+  const tag=u.pathname.match(/^\/api\/v3\/hashtags\/([^/]+)\/notes$/);
+  if(tag){
+   const values=sourceFixtures?fixturePeople(sourceFixtures.tags?.[decodeURIComponent(tag[1])]||[]):people.slice(0,state.targetCount);
+   const page=Number(u.searchParams.get('page'))||1,size=Math.min(50,searchPageSize),end=page*size,last=end>=values.length;
+   return {data:{notes:values.slice(end-size,end).map(person=>note(person.urlname)),is_last_page:last,next_page:last?null:page+1}};
+  }
   if(u.pathname.includes('/searches')){
    if(sourceFixtures){const values=fixturePeople(sourceFixtures.tags?.[u.searchParams.get('q')]||[]),start=Number(u.searchParams.get('start'))||0,size=Math.min(searchPageSize,Number(u.searchParams.get('size'))||20),end=start+size,last=end>=values.length;return{data:{notes:{contents:values.slice(start,end).map(p=>note(p.urlname)),is_last_page:last},cursor:{note:last?null:String(end)}}}}
    return{data:{notes:{contents:people.slice(0,state.targetCount).map(p=>note(p.urlname)),is_last_page:true}}};

@@ -17,7 +17,7 @@ function runtime({search={},notes={},magazine=[],pin=null,searchFunction=null}={
  const requests=[],statuses=[];let pages=0;
  window.request=async url=>{
   requests.push(url);const parsed=new URL(url);
-  if(url.includes('/searches')){pages++;return searchFunction?searchFunction(parsed,pages):{data:{notes:{contents:search[parsed.searchParams.get('q')]||[],is_last_page:true}}};}
+  if(url.includes('/hashtags/')){pages++;const tag=decodeURIComponent(parsed.pathname.split('/').at(-2));return searchFunction?searchFunction(parsed,pages):{data:{notes:search[tag]||[],is_last_page:true,next_page:null}};}
   if(url.includes('/magazines/'))return{data:{notes:magazine}};
   const match=parsed.pathname.match(/^\/api\/v3\/notes\/(n[a-f0-9]{12})$/);if(match)return{data:notes[match[1]]||{}};
   if(parsed.pathname.endsWith('/likes'))return{data:{likes:[{user:{urlname:'alpha',key:'account-alpha',nickname:'alpha'}}]}};
@@ -70,13 +70,13 @@ test('a listed magazine fallback survives missing detail while unlisted pins rem
 });
 test('scoped oldest reads source pages and chooses the earliest matching article per person',async()=>{
  const aNew=note('alpha',1,['指定タグ'],'2026-10-01T00:00:00Z'),aOld=note('alpha',2,['指定タグ'],'2020-01-01T00:00:00Z'),bNew=note('beta',3,['指定タグ'],'2026-09-01T00:00:00Z'),bOld=note('beta',4,['指定タグ'],'2021-01-01T00:00:00Z');
- const r=runtime({notes:{[key(1)]:aNew,[key(2)]:aOld,[key(3)]:bNew,[key(4)]:bOld},searchFunction:(url,page)=>({data:{notes:{contents:page===1?[aNew,bNew]:[aOld,bOld],is_last_page:page===2},cursor:{note:page===1?'next':null}}})});const rows=await r.api.collectUnified('#指定タグ','number',2,'oldest');assert.deepEqual(Array.from(rows,row=>row.key),[key(2),key(4)]);assert.equal(r.pages(),2);assert.ok(!r.requests.some(url=>url.includes('/contents')));assert.equal(r.window.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__.cappedSources.length,0);r.close();
+ const r=runtime({notes:{[key(1)]:aNew,[key(2)]:aOld,[key(3)]:bNew,[key(4)]:bOld},searchFunction:(url,page)=>({data:{notes:page===1?[aNew,bNew]:[aOld,bOld],is_last_page:page===2,next_page:page===1?2:null}})});const rows=await r.api.collectUnified('#指定タグ','number',2,'oldest');assert.deepEqual(Array.from(rows,row=>row.key),[key(2),key(4)]);assert.equal(r.pages(),2);assert.ok(!r.requests.some(url=>url.includes('/contents')));assert.equal(r.window.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__.cappedSources.length,0);r.close();
 });
 test('the bounded oldest search reports its limit instead of claiming complete history',async()=>{
  const r=runtime({searchFunction:(url,page)=>{
   const article=note('account_'+page,page,['指定タグ'],new Date(Date.UTC(2026,0,1)-page*86400000).toISOString());
   r.window.details??={};r.window.details[article.key]=article;
-  return{data:{notes:{contents:[article]},cursor:{note:String(page)}}};
+  return{data:{notes:[article],is_last_page:false,next_page:page+1}};
  }});
  const original=r.window.request;r.window.requestWithDetails=async url=>{const match=new URL(url).pathname.match(/^\/api\/v3\/notes\/(n[a-f0-9]{12})$/);return match?{data:r.window.details[match[1]]}:original(url)};r.api.patch('xhrJSON=requestWithDetails');
  const rows=await r.api.collectUnified('#指定タグ','number',1,'oldest');assert.equal(r.pages(),250);assert.equal(rows[0].key,key(250));assert.equal(r.window.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__.cappedSources.length,1);assert.ok(r.statuses.at(-1).includes('確認範囲内'));r.close();

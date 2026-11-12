@@ -1,5 +1,6 @@
 import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {runtime,dependencies} from './fixtures/profile-card-quality-runtime.mjs';
 
 const test=(name,fn)=>nodeTest(name,{skip:!dependencies?'Real PM/canvas dependencies are required':false},fn);
@@ -12,10 +13,10 @@ function complete(r,people){
  assert.equal(new Set(run.items.map(item=>item.url)).size,people.length+1);return run;
 }
 
-test('generic tags traverse actual cursor pages and deduplicate repeated creators without moving the final math row',async t=>{
+test('generic tags traverse tag pages and deduplicate repeated creators without moving the final math row',async t=>{
  const values=[...range(0,20),7,...range(20,40),2,...range(40,47)],r=await runtime({count:47,render:false,sourceFixtures:{tags:{fixture:values}}});t.after(()=>r.close());
  await r.normal();complete(r,range(0,47));assert.equal(r.state.apiStats.byKind.search,3);
- assert.deepEqual(r.state.requests.filter(url=>new URL(url).pathname.endsWith('/searches')).map(url=>new URL(url).searchParams.get('start')),['0','20','40']);
+ assert.deepEqual(r.state.requests.filter(url=>new URL(url).pathname.includes('/hashtags/')).map(url=>new URL(url).searchParams.get('page')),['1','2','3']);
  assert.equal(r.quality.snapshot().counts.mismatch||0,0);
 });
 
@@ -123,4 +124,105 @@ test('generic paginated acquisition still holds a contradictory pending row and 
  let wrong=true;const r=await runtime({count:25,render:false,sourceFixtures:{tags:{fixture:range(0,25)}},requestMutator:(url,payload)=>{if(wrong&&new URL(url).pathname==='/api/v3/notes/n000000000015')payload.data.user.urlname='unrelated_account';return payload}});t.after(()=>r.close());
  await r.normal();const held=r.editor.readRun();assert.equal(held.stage,'images_building');assert.equal(held.qualityHold?.index,20);assert.equal(r.state.images.length,20);assert.ok(!held.imageSkipped?.length);assert.ok(!held.imagesCompletedAt);const plan=ids(held);
  wrong=false;await r.core.pasteSavedSpecial();complete(r,range(0,25));assert.deepEqual(ids(r.editor.readRun()),plan);
+});
+
+const testArticle='https://note.com/fixture/n/n000000000099';
+const currentDistribution=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8');
+const withoutEmptyGuard=currentDistribution.replace(/^ if\(!rows.length\)throw new Error\('条件に合うクリエイターが0人です' \+ .*$/m,'');
+const blocks=(r,type)=>r.doc().content.filter(block=>block.type===type);
+
+test('an empty article-likes list or tag result never pastes the math footer',async t=>{
+ for(const kind of ['note','tag']){
+  const r=await runtime({count:2,sourceFixtures:{likes:{},tags:{}}});t.after(()=>r.close());
+  const before=r.doc();
+  await r.normal({kind});
+  assert.equal(r.editor.readRun(),null);
+  assert.deepEqual(r.doc(),before);
+  assert.match(r.state.statuses.at(-1)?.text,/0人/);
+  assert.ok(!r.state.requests.some(url=>new URL(url).pathname.endsWith('/nb4f6934381e9')));
+ }
+});
+
+test('article URL accepts paginated flat and nested likes and keeps their creator order',async t=>{
+ const r=await runtime({count:2,requestMutator:(url,payload)=>{
+  const input=new URL(url);
+  if(!input.pathname.endsWith('/likes'))return payload;
+  const people=payload.data.likes;
+  return input.searchParams.get('page')==='1'
+   ?{data:[people[0].user],next_page:2}
+   :{data:{likes:[people[1]],next_page:null}};
+ }});t.after(()=>r.close());
+ await r.normal({kind:'note',sources:testArticle});
+ complete(r,[0,1]);
+ assert.equal(r.state.apiStats.byKind.likes,2);
+ await r.core.createCardsAtTap();
+ assert.equal(r.editor.readRun().stage,'complete',r.state.statuses.at(-1)?.text);
+ assert.equal(blocks(r,'embed').length,3);
+});
+
+test('a rejected article-likes request reports its HTTP result and leaves the draft intact',async t=>{
+ const r=await runtime({count:1,requestMutator:(url,payload)=>{
+  if(new URL(url).pathname.endsWith('/likes'))throw new Error('GET 403 '+url);
+  return payload;
+ }});t.after(()=>r.close());
+ const before=r.doc();
+ await r.normal({kind:'note',sources:testArticle});
+ assert.deepEqual(r.doc(),before);
+ assert.equal(r.editor.readRun(),null);
+ assert.match(r.state.statuses.at(-1)?.text,/記事URLのスキ一覧.*HTTP 403.*履歴から開始/);
+});
+
+async function previousFooter(t){
+ assert.notEqual(withoutEmptyGuard,currentDistribution);
+ const sourceFixtures={likes:{n000000000099:[]}};
+ const old=await runtime({count:2,sourceFixtures,moduleCode:withoutEmptyGuard});
+ t.after(()=>old.close());
+ await old.normal({kind:'note',sources:testArticle});
+ assert.deepEqual(ids(old.editor.readRun()),['fuku444']);
+ const r=await old.reload({moduleCode:currentDistribution});
+ t.after(()=>r.close());
+ return {r,sourceFixtures};
+}
+
+test('resume retries a final-only URL batch and replaces its footer after obtaining people',async t=>{
+ const {r,sourceFixtures}=await previousFooter(t);
+ const before=r.doc();
+ await r.core.createCardsAtTap();
+ assert.equal(blocks(r,'embed').length,0);
+ await r.core.pasteSavedSpecial();
+ assert.match(r.state.statuses.at(-1)?.text,/0人/);
+ assert.deepEqual(r.doc(),before);
+ sourceFixtures.likes.n000000000099=[0,1];
+ await r.core.pasteSavedSpecial();
+ const run=r.editor.readRun();
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.deepEqual(ids(run),['quality_person_0','quality_person_1','fuku444']);
+ assert.equal(blocks(r,'image').length,3);
+ assert.ok(r.view.state.doc.textContent.includes('元の文章です。'));
+});
+
+test('article-filtered history replaces a final-only URL batch without the zero-history migration',async t=>{
+ const {r}=await previousFooter(t);
+ const filter={fromDate:'',toDate:'',articleKey:'n000000000099',timezone:'Asia/Tokyo'};
+ const bridge=r.gm.get('mumei_profile_card_likes_300_v2');
+ r.gm.set('mumei_profile_card_likes_300_v2',{...bridge,historyFilter:filter,people:bridge.people.slice(0,2).map(person=>({...person,likedArticleKey:filter.articleKey}))});
+ const before=r.editor.readRun().items[0].id;
+ await r.editor.createFixed300({mode:'all',target:Infinity,historyFilter:filter});
+ const run=r.editor.readRun();
+ assert.equal(run.stage,'images_ready',r.state.statuses.at(-1)?.text);
+ assert.equal(run.likesHistoryFix230,true);
+ assert.equal(run.historyFilter.articleKey,filter.articleKey);
+ assert.deepEqual(ids(run),['quality_person_0','quality_person_1','fuku444']);
+ assert.equal(blocks(r,'image').length,3);
+ assert.ok(run.items.every(item=>item.id!==before));
+});
+
+test('older preparations retry people skipped by the summary-only requirement',async t=>{
+ const r=await runtime({count:2});t.after(()=>r.close());
+ const bridge=r.gm.get('mumei_profile_card_likes_300_v2');
+ const skipped=bridge.people.map(person=>({urlname:person.urlname,likerKey:person.likerKey,code:'SUMMARY_UNAVAILABLE',reason:'旧要約なし'}));
+ const prep={signature:String(bridge.at)+'|2|eligible-v251',index:skipped.length,rows:[],skipped,presentationOptions:{size:'thin',content:'summary'}};
+ r.editor.patch('writePrep('+JSON.stringify(prep)+')');
+ await r.history();
+ complete(r,[0,1]);
 });

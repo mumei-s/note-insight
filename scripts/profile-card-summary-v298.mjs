@@ -131,10 +131,12 @@ export function transformCoreSummary(source){
 }
 export function transformEditorSummary(source){
  source=common(source);
- // A partially prepared v2.9.10 run may already have skipped old summary failures.
+ // A compatible preparation can contain skips made by the former summary-only
+ // requirement. Retry those preparations under the current fallback policy.
  source=changeFunction(source,'buildRows',part=>{
-  part=once(part," if(target!==Infinity&&rows.length<target)throw", " if(target!==Infinity&&rows.length<target&&!skipped.some(person=>person.code==='SUMMARY_UNAVAILABLE'))throw");
-  return once(part," if(!rows.length)throw", " if(!rows.length&&!skipped.some(person=>person.code==='SUMMARY_UNAVAILABLE'))throw");
+  part=once(part,' let rows=Array.isArray(saved?.rows)&&compatible?saved.rows:[];', ' const retryLegacySkips=compatible&&saved.skipped?.some(person=>person.code===\'SUMMARY_UNAVAILABLE\');\n let rows=Array.isArray(saved?.rows)&&compatible&&!retryLegacySkips?saved.rows:[];');
+  part=once(part,'saved.signature===signature?saved.skipped:[]','saved.signature===signature&&!retryLegacySkips?saved.skipped:[]');
+  return once(part,'let index=compatible?Number(saved.index||0):0;','let index=compatible&&!retryLegacySkips?Number(saved.index||0):0;');
  });
  source=changeFunction(source,'createFixed300',part=>{
   part=once(part,'  existing=await qualityPrepareRun(existing);','  existing=await qualityPrepareRun(existing);\n  existing=await summaryRepairCompleted(view,existing);');

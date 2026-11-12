@@ -35,10 +35,20 @@ function scopeIdentityMismatch(row,note){
  return differs(expected.account,actual.account)||differs(expected.key,actual.key)||urls.some(url=>differs(expected.account,url.account)||differs(expected.key,url.key));
 }
 function magazineMembership(note,key){return Array.isArray(note?.belonging_magazine_keys)&&note.belonging_magazine_keys.some(value=>typeof value==='string'&&value===key)}
+async function articleLikesPage(key,page){
+ const payload=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(key)+'/likes?page='+page+'&per=50');
+ const data=payload?.data,list=Array.isArray(data)?data:data?.likes;
+ if(!Array.isArray(list))throw new Error('スキ一覧の応答を確認できません');
+ const pagination=Array.isArray(data)?payload:data;
+ const next=pagination.next_page??pagination.nextPage;
+ const last=pagination.is_last_page===true||pagination.isLastPage===true||
+  ('next_page' in pagination||'nextPage' in pagination)&&next==null;
+ return {list,last,next:Number(next)||null};
+}
 `;
 const collect=String.raw`async function collectUnified(raw,mode,count,choice){
  resetSourceScopeNotes();
- const sources=parseUnifiedSources(raw),limit=targetLimit(mode,count),out=[],seenUrls=new Set(),creators=new Set(['fuku444']),creatorKeys=new Set(),choices=new Map(),issues=[],issueKeys=new Set(),cappedSources=[];
+ const sources=parseUnifiedSources(raw),limit=targetLimit(mode,count),out=[],seenUrls=new Set(),creators=new Set(['fuku444']),creatorKeys=new Set(),choices=new Map(),issues=[],issueKeys=new Set(),cappedSources=[],failedLikeSources=[];
  let unavailable=0,scopeUnavailable=0,scopeRejected=0,fixedSkipped=0;
  const creatorId=row=>scopeAccount(row?.urlname)||scopeUrlIdentity(row?.url).account||'';
  const issue=(row,reason,source,type='unavailable')=>{
@@ -106,10 +116,25 @@ const collect=String.raw`async function collectUnified(raw,mode,count,choice){
   const rowsFrom=list=>{const rows=[];for(const item of list){const row=articleFromRaw(item,{});if(!row||candidateKeys.has(row.key))continue;candidateKeys.add(row.key);listed.add(row.key);rows.push(row);}return rows};
   if(source.type==='note'){
    const key=noteKey(source.value);if(!key)continue;
-   for(let page=1;page<=200&&out.length<limit;page++){
+   const seen=new Set();
+   for(let page=1;page<=200&&out.length<limit;){
     if(stopRequested)throw new Error('停止しました');status('記事のスキ');
-    const payload=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(key)+'/likes?page='+page+'&per=50'),list=Array.isArray(payload?.data?.likes)?payload.data.likes:[];
-    await acceptLikers(list.map(parseLiker).filter(Boolean),source);if(list.length<50)break;
+    let result;
+    try{result=await articleLikesPage(key,page)}catch(error){
+     if(stopRequested)throw error;
+     const code=String(error?.message||'').match(/\bGET (\d{3})\b/)?.[1]||'';
+     failedLikeSources.push({articleKey:key,code});
+     break;
+    }
+    const {list,last,next}=result,people=[];
+    for(const item of list){
+     const person=parseLiker(item);
+     if(!person||seen.has(person.urlname))continue;
+     seen.add(person.urlname);people.push(person);
+    }
+    await acceptLikers(people,source);
+    if(last||!list.length||(!people.length&&next==null)||(next!=null&&next<=page))break;
+    page=next??page+1;
    }continue;
   }
   if(source.type==='mag'){
@@ -122,14 +147,16 @@ const collect=String.raw`async function collectUnified(raw,mode,count,choice){
    }
    capped=choice==='oldest'&&!exhausted&&start>=10000;
   }else if(source.type==='tag'){
-   let cursor='0';const cursors=new Set([cursor]);
-   for(let page=1;page<=250&&(choice==='oldest'||out.length<limit);page++){
+   for(let page=1;page<=250&&(choice==='oldest'||out.length<limit);){
     if(stopRequested)throw new Error('停止しました');status('#'+source.value+' が付いた記事');
-    const payload=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(source.value)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new'),result=normalizeSearch(payload),rows=rowsFrom(result.arr);
+    const payload=await xhrJSON('https://note.com/api/v3/hashtags/'+encodeURIComponent(source.value)+'/notes?order=new&page='+page),data=payload?.data;
+    if(!Array.isArray(data?.notes))throw new Error('#'+source.value+' の記事一覧を確認できません');
+    const rows=rowsFrom(data.notes);
     if(choice==='oldest')candidates.push(...rows);else await acceptScoped(rows,source,listed);
-    if(result.last||!result.arr.length){exhausted=true;break;}
-    if(result.cursor==null||cursors.has(String(result.cursor))){capped=choice==='oldest';break;}
-    cursor=String(result.cursor);cursors.add(cursor);if(page===250)capped=choice==='oldest';
+    if(data.is_last_page===true||!data.notes.length){exhausted=true;break;}
+    const next=Number(data.next_page);
+    if(!Number.isInteger(next)||next<=page||next>250){capped=choice==='oldest';break;}
+    page=next;
    }
   }
   if(choice==='oldest'){
@@ -144,7 +171,11 @@ const collect=String.raw`async function collectUnified(raw,mode,count,choice){
    if(capped&&!exhausted&&cappedSources.length<160)cappedSources.push({kind:source.type,source:source.label||source.value,limit:source.type==='tag'?250:10000,reason:'取得上限または継続情報を確認できず、最古は確認できた範囲内'});
   }
  }
- page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__={choice,unavailable,scopeUnavailable,scopeRejected,fixedSkipped,issues,recorded:issues.length,cappedSources};
+ page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__={choice,unavailable,scopeUnavailable,scopeRejected,fixedSkipped,issues,recorded:issues.length,cappedSources,failedLikeSources};
+ if(!out.length&&failedLikeSources.length){
+  const code=failedLikeSources[0].code;
+  throw new Error('記事URLのスキ一覧を取得できませんでした'+(code?'（HTTP '+code+'）':'')+'。自分の記事は「記事を指定」から「履歴から開始」でも取得できます');
+ }
  if(unavailable||scopeRejected||cappedSources.length)setStatus('条件に合う記事 '+out.length+'人｜タグ対象外 '+scopeRejected+'件｜条件未確認 '+unavailable+'件'+(cappedSources.length?'｜最古は確認範囲内（取得上限あり）':''));
  return out;
 }`;
@@ -152,10 +183,18 @@ const notice=String.raw`function sourceSelectionNotice(run=readRun()){
  const selection=run?.sourceSelection;if(!selection)return'';const parts=[];
  if(selection.scopeRejected)parts.push('タグ対象外 '+selection.scopeRejected+'件');
  if(selection.unavailable)parts.push('対象条件未確認・固定なし '+selection.unavailable+'件');
+ if(selection.failedLikeSources?.length)parts.push('取得できなかった記事URL '+selection.failedLikeSources.length+'件');
  if(selection.cappedSources?.length)parts.push('最古は確認範囲内（取得上限あり）');
  return parts.length?'｜'+parts.join('｜'):'';
 }`;
 export function transformCoreSourceScope(source){
+ source=replaceFunction(source,'parseLiker',String.raw`function parseLiker(item){
+ const user=item?.user||item,urlname=scopeAccount(user?.urlname||user?.urlName);
+ if(!urlname)return null;
+ const id=String(user.key??user.id??urlname).trim()||urlname;
+ return {likerKey:id,urlname,creator:String(user.nickname||user.name||urlname).trim(),actorUrl:'https://note.com/'+urlname,
+  actorImageUrl:mediaUrl(user.user_profile_image_url||user.userProfileImagePath||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||user.icon_url||user.image_url||'')};
+ }`);
  source=replaceFunction(source,'collectUnified',helpers+'\n'+collect);
  source=replaceFunction(source,'sourceSelectionNotice',notice);
  source=once(source," const notePromise=xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key)).catch(()=>({}));"," const notePromise=scopeNote(row.key).catch(()=>({}));");
