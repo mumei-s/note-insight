@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.6
+// @version      6.9.7
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -224,7 +224,14 @@ function mountOwnerBoostPanel(){
       const j=await res.json(),d=j?.data??j??{},u=d.user??d;
       owner=String(u.urlname||u.url_name||u.username||'').replace(/^@/,'').toLowerCase()==='ss_yr';
     }catch{owner=false}
-    finally{checking=false;if(owner)mount();else dismiss()}
+    finally{checking=false;if(owner){mount();returnToBoost()}else dismiss()}
+  }
+
+  function returnToBoost(){
+    if(!fromBoost||!owner||!document.body||document.getElementById('boost-return-v697'))return;
+    const b=document.createElement('button');b.id='boost-return-v697';b.textContent='← BOOSTへ戻る';
+    b.style.cssText='position:fixed!important;left:8px!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;z-index:2147483647!important;border:1px solid #d4b47d!important;border-radius:12px!important;background:#0b2430!important;color:white!important;padding:11px 14px!important;font:800 13px system-ui!important;box-shadow:0 6px 20px #0007!important';
+    b.onclick=()=>location.assign(APP_URL);document.body.appendChild(b);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>void verify(true),{once:true});else void verify(true);
   addEventListener('pageshow',()=>void verify(true));addEventListener('focus',()=>void verify(true));
@@ -294,8 +301,37 @@ html,body{width:100%!important;min-width:0!important;overflow-x:hidden!important
 .modalbody .listrow img,.modalbody .listrow .boost-card-placeholder{width:94px!important;height:66px!important;object-fit:cover!important}
 @media(max-width:370px){#current .boost-article-row{grid-template-columns:114px minmax(0,1fr)!important}#current .boost-article-thumb,#current .boost-card-placeholder{width:114px!important;height:80px!important}.boost-queue-item{grid-template-columns:98px minmax(0,1fr)!important}.boost-queue-item>.boost-card-placeholder,.boost-queue-item>img{width:98px!important;height:70px!important}}
 
+
+/* BOOST mobile layout guard: prevent accidental auto-zoom and overflowing list contents */
+html,body{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
+.app,.card,.modal,.modalbody,.listrow,.listrow>div,.boost-queue-item,.boost-queue-copy{min-width:0!important;max-width:100%!important}
+.modal{width:100vw!important;max-width:100%!important;overflow:hidden!important}
+.modalbody{width:100%!important;overflow-x:hidden!important;overflow-wrap:anywhere;overscroll-behavior:contain}
+.modalbody img{max-width:100%!important}
+.modalbody h2,.modalbody b,.modalbody .meta,.boost-queue-copy b{overflow-wrap:anywhere;word-break:break-word}
+.listrow,.modalbody .listrow{grid-template-columns:94px minmax(0,1fr)!important}
+input[type=text],input[type=search],input[type=number],#source,#magSearch{font-size:16px!important}
+.headrow .boost-head-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.headrow .boost-head-actions button{padding:6px 8px;font-size:11px;min-height:32px}
+.boost-five-list{display:grid;gap:7px;margin-top:7px}
+.boost-five-card{min-width:0;border:1px solid #365160;border-radius:11px;background:#091c27;padding:8px}
+.boost-five-card.selected{border-color:#d0ac6b;background:#102636}
+.boost-five-title{font-size:12px;font-weight:900;overflow-wrap:anywhere}
+.boost-five-article{display:grid;grid-template-columns:94px minmax(0,1fr);gap:8px;min-width:0;margin-top:6px}
+.boost-five-article img,.boost-five-article .boost-card-placeholder{width:94px!important;height:65px!important;max-width:100%!important;object-fit:cover}
+.boost-five-article>div{min-width:0}
+.boost-five-article b{font-size:12px;line-height:1.35;display:block;overflow-wrap:anywhere}
+.boost-five-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:6px}
+.boost-five-actions button{padding:6px 3px!important;font-size:11px!important;min-height:31px!important}
+.boost-settings-line{display:grid;grid-template-columns:minmax(0,1fr) 82px 82px;gap:6px;align-items:center;font-size:11px;margin-top:7px}
+.boost-settings-line label{display:flex;align-items:center;gap:3px}
+.boost-settings-line input{width:100%!important;min-width:0!important;text-align:center;padding:6px 2px!important}
+.boost-settings-caption{font-size:10px;color:#93aabb;margin:7px 0}
+.boost-settings-follow{display:flex;align-items:center;gap:7px;font-size:12px}
+.boost-settings-follow input{width:19px!important;height:19px!important;flex:0 0 19px}
+@media(max-width:375px){.boost-five-article{grid-template-columns:84px minmax(0,1fr)}.boost-five-article img,.boost-five-article .boost-card-placeholder{width:84px!important;height:59px!important}.boost-settings-line{grid-template-columns:minmax(0,1fr) 73px 73px}}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.6</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div class="boost-head-actions"><span id="acct" class="acct">診断中…</span><button id="backBoost" type="button">← 戻る</button><button id="exitBoost" type="button">終了 ×</button></div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.7</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
@@ -303,7 +339,7 @@ html,body{width:100%!important;min-width:0!important;overflow-x:hidden!important
 <details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
 </section>
 <section id="current" class="card hidden"></section></main>
-<footer class="footer"><button id="prev">戻る</button><button id="next">次へ</button></footer>
+<footer class="footer"><button id="prev">← 前の5人</button><button id="next">次の5人 →</button></footer>
 <section id="previewModal" class="modal"><div class="modalhead"><button data-close="previewModal">戻る</button><b>プレビュー</b></div><div id="previewBody" class="modalbody"></div></section>
 <section id="creatorModal" class="modal"><div class="modalhead"><button data-close="creatorModal">戻る</button><b>クリエイター</b></div><div id="creatorBody" class="modalbody"></div></section>
 <section id="queueModal" class="modal"><div class="modalhead"><button data-close="queueModal">戻る</button><b>記事一覧</b></div><div id="queueBody" class="modalbody"></div></section><section id="magModal" class="modal"><div class="modalhead"><button data-close="magModal">戻る</button><b>マガジン追加</b></div><div id="magBody" class="modalbody"></div></section><section id="favModal" class="modal"><div class="modalhead"><button data-close="favModal">戻る</button><b>⭐ お気に入り</b></div><div id="favBody" class="modalbody"></div></section>
@@ -661,12 +697,13 @@ async function hydrateMagThumbs(){const jobs=currentMags.filter(m=>!m.image&&m.u
 function renderMagList(filter=''){const list=$('#magList');if(!list)return;const q=filter.trim().toLowerCase();list.innerHTML=currentMags.filter(m=>!q||m.name.toLowerCase().includes(q)).map(m=>`<label class="mag" data-magrow="${esc(m.key)}">${m.image?`<img src="${esc(m.image)}" data-magopen="${esc(m.url)}">`:'<div class="magph">📚</div>'}<input type="checkbox" data-magcheck value="${esc(m.key)}" ${m.added?'checked disabled':''}><span><b>${esc(m.name)}</b><div class="meta">${m.added?'✔ 追加済み':`${m.count}記事`}</div></span></label>`).join('')||'<div class="empty">該当するマガジンがありません</div>';for(const im of $$('#magList [data-magopen]'))im.onclick=e=>{e.preventDefault();e.stopPropagation();goOut(im.dataset.magopen)}}
 async function openMags(){const x=current();if(!x)return;showModal('magModal');$('#magBody').innerHTML='マガジンを読み込み中…';try{const base=await loadMagazineBase(false);currentMags=base;$('#magBody').innerHTML=`<div class="mag-controls"><div class="bar"><input id="magSearch" placeholder="マガジン検索"><button id="magReload">更新</button></div><button id="magAddTop" class="mag-add">選択したマガジンへ追加</button><div id="magMsg" class="msg">追加状態を確認中…</div></div><div id="magList" class="mag-list"></div><button id="magAddBottom" class="mag-add">選択したマガジンへ追加</button>`;renderMagList();$('#magSearch').oninput=e=>renderMagList(e.target.value);$('#magAddTop').onclick=addSelectedMags;$('#magAddBottom').onclick=addSelectedMags;$('#magReload').onclick=async()=>{await loadMagazineBase(true);currentMags=await editableMagazines(x.key);renderMagList($('#magSearch')?.value||'');setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()};currentMags=await editableMagazines(x.key);renderMagList();setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()}catch(e){$('#magBody').textContent=formatError(e)}}
 async function addSelectedMags(){if(magBusy)return;const x=current();if(!x)return;const keys=$$('#magBody [data-magcheck]:checked:not(:disabled)').map(e=>e.value);if(!keys.length){setMsg('追加先を選択してください');return}magBusy=true;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=true;b.textContent='追加中…'}let ok=0,already=0,fail=0;try{const detail=await noteDetail(x.key),noteId=x.id??detail.id;if(!noteId)throw new Error('記事IDを取得できません');for(const key of keys){try{enforce('mags');await api(`/api/v1/our/magazines/${encodeURIComponent(key)}/notes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:JSON.stringify({note_id:noteId,note_key:x.key})});pushHist('mags',`${key}:${x.key}`);ok++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;setMsg(`追加中… ${ok+already}/${keys.length}`)}catch(e){const body=JSON.stringify(e.body||'');if(/already|exist|included/i.test(body)||e.status===409||e.status===422){already++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;continue}if(e.status===403){setGuard('mags',Date.now()+3600000,'403検出');fail++;setMsg('403を検出したため停止しました');break}if(e.status===429){setGuard('mags',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');fail++;setMsg('429を検出したため停止しました');break}fail++}}renderMagList($('#magSearch')?.value||'');setMsg(`追加 ${ok}｜追加済み ${already}｜失敗 ${fail}`);refreshLimits()}catch(e){setMsg(formatError(e))}finally{magBusy=false;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=false;b.textContent='選択したマガジンへ追加'}}}
-function showModal(id){$('#'+id)?.classList.add('show')}
+function showModal(id){try{document.activeElement?.blur?.()}catch{}const m=$('#'+id);if(m){m.classList.add('show');const body=m.querySelector('.modalbody');if(body)body.scrollTop=0}}
 function closeModal(id){$('#'+id)?.classList.remove('show')}
 for(const b of $$('[data-close]'))b.onclick=()=>closeModal(b.dataset.close);
 $('#prev').onclick=async()=>{if(state.index>0){state.index--;saveState();await render()}};
 $('#next').onclick=async()=>{if(state.index<state.queue.length-1){state.index++;saveState();await render()}else status('最後の巡回対象です')};
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
+$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(state.index>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
