@@ -317,7 +317,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   const cleanup=()=>{collectionSeq.current++;collectionController.current?.abort();collectionController.current=null};
   setCollectionMessage("");setCollectionFailures([]);setCollectionRetryAt(0);setCollecting(false);
   const saved=COMMENT_COLLECTION.get(viewScope);
-  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at,120_000)){setCollectionMessage(saved.message);setCollectionFailures(saved.failures||[]);setCollectionRetryAt(saved.retryAt||0);return cleanup}
+  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&canRetainInsightView(saved.at)){setCollectionMessage(saved.message);setCollectionFailures(saved.failures||[]);setCollectionRetryAt(saved.retryAt||0);return cleanup}
   if(persistKey&&token)void collectComments();
   return cleanup;
  },[persistKey,token,viewScope,revision,controlsReady]);
@@ -341,7 +341,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   setError("");setRows(retained?cached.rows:savedRows);setTotal(retained?cached.total:Number(stored?.value.total)||0);setLoadedPage(retained?cached.page||1:1);setSavedDisplay(stored?.savedAt||0);
   setDetail(aux?.detail||{});setHearts(aux?.hearts||{});
   const exhaustive=status==="all"&&Boolean(query.trim());
-  if(cached&&lastVerifiedScope===viewScope&&cached.revision===revision&&!cached.invalidated&&isFreshInsightView(cached.at,60_000)&&(!exhaustive||cached.rows.length>=cached.total)){
+  if(cached&&lastVerifiedScope===viewScope&&cached.revision===revision&&!cached.invalidated&&canRetainInsightView(cached.at)&&(!exhaustive||cached.rows.length>=cached.total)){
    beginLoad();setLoading(false);setSyncPhase("idle");return cleanup;
   }
   COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});
