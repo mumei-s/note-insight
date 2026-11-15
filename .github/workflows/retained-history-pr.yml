@@ -1,0 +1,26 @@
+name: INSIGHT retained comment history checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/retention/insight_observed_history.sql'
+      - 'tests/insight-deleted-creator-retention.test.mjs'
+      - '.github/workflows/retained-history-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --test tests/insight-deleted-creator-retention.test.mjs tests/owner-dm-retention.test.mjs
+      - run: npm run build
