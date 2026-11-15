@@ -1,4 +1,4 @@
-INSIGHT 2026.11.15.2 / notification 3.6.68 / dashboard 1.7.7 / DM 1.4.20
+INSIGHT 2026.11.15.3 / notification 3.6.68 / dashboard 1.7.7 / DM 1.4.20
 Restore native bell context after article history navigation; preserve each tab's source entry and bounded scroll restoration.
 Suppress proven duplicate native notices and rearm a collapsed filtered page only on a downward gesture or explicit continuation.
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
@@ -33,3 +33,5 @@ Keep last confirmed positive relationships normal after a capped-window exit; do
 2026-11-15: Restore the entry-page release checker and align its manifest and running app version, so users see the INSIGHT update action for magazine addition-date audits and searchable notification categories. No user data or installed userscript versions are reset.
 
 2026-11-15 v2026.11.15.2: Isolate the notification category picker in a modal to stop back-screen movement; show independently stored magazine-addition notice timestamps automatically on opening article search. 300 notifications is one reader window, not total archive limit.
+
+2026-11-15 v2026.11.15.3: Notification archive remains saved. Show active date/category/completion filters, exact scope count, and one-tap all-history reset without clearing storage; regression covers count recovery.
