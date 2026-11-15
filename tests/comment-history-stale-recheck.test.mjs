@@ -7,10 +7,13 @@ import {isFreshInsightView,canRetainInsightView} from '../src/insight-view-lifec
 const source=readFileSync('src/member-insight-comments-final.tsx','utf8');
 
 test('同一セッション内の古いコメントキャッシュは表示用に保持しつつ最新確認では失効させる',()=>{
- const old=Date.now()-5*60_000;
- assert.equal(canRetainInsightView(old),true);
- assert.equal(isFreshInsightView(old,60_000),false);
- assert.equal(isFreshInsightView(Date.now()-1000,60_000),true);
+ const start=Date.now(),nativeNow=Date.now;
+ try{
+  Date.now=()=>start+5*60_000;
+  assert.equal(canRetainInsightView(start),true);
+  assert.equal(isFreshInsightView(start,60_000),false);
+  assert.equal(isFreshInsightView(Date.now()-1000,60_000),true);
+ }finally{Date.now=nativeNow}
  assert.match(source,/cached\.revision===revision&&!cached\.invalidated&&isFreshInsightView\(cached\.at,60_000\)/);
  assert.match(source,/saved\.revision===revision&&isFreshInsightView\(saved\.at,120_000\)/);
 });
@@ -18,7 +21,10 @@ test('他のタブから戻ったときは古い履歴だけ再検証し、連�
  const start=source.indexOf('const onReturn=()=>{'),end=source.indexOf('\n  };',start);
  assert.ok(start>0&&end>start,'production focus handler exists');
  let calls=0;
- const cached=new Map([['own',{at:Date.now()-180_000}]]);
+ const sessionAt=Date.now(),nativeNow=Date.now;
+ Date.now=()=>sessionAt+180_000;
+ try{
+ const cached=new Map([['own',{at:sessionAt}]]);
  const state={current:0};
  let currentToken='tok',visibilityState='visible';
  const ctx=vm.createContext({
@@ -42,4 +48,5 @@ test('他のタブから戻ったときは古い履歴だけ再検証し、連�
  assert.equal(calls,1,'other account cannot trigger request');
  currentToken='tok';visibilityState='hidden';ctx.onReturn();
  assert.equal(calls,1,'hidden document does not trigger request');
+ }finally{Date.now=nativeNow}
 });
