@@ -58,7 +58,7 @@ async function testSpecial(){
  const saved={
   version:1,signature:JSON.stringify({tags:[...tags].sort(),limit:50}),
   states:tags.map(tag=>({tag,cursor:'0',done:true,page:1,buffer:[]})),
-  out:[strict[0],strict[1],general[0],general[1]],
+  out:[strict[0],strict[1],general[0],general[1]].map(row=>({...row,specialSourceTag:row.sourceTag})),
   tested:everything.map(x=>x.url),scanned:5,rejects:{},anchorPos:0
  };
  const resumed=specialHarness(saved),reused=await resumed.fn('number',200,tags);
