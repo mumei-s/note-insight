@@ -1,0 +1,28 @@
+name: INSIGHT notification comment history backfill
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/insight-comment-refresh/index.ts'
+      - 'supabase/retention/insight_comment_notification_backfill_candidates.sql'
+      - 'tests/notification-triggered-comment-history.test.mjs'
+      - 'tests/comment-refresh-recovery.test.mjs'
+      - '.github/workflows/notification-comment-backfill-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  comment-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/comment-refresh-recovery.test.mjs tests/notification-triggered-comment-history.test.mjs tests/comment-checkpoint-batch.test.mjs
+      - run: npm run build

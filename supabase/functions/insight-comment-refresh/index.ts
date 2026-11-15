@@ -90,6 +90,13 @@ async function missingArticles(dataMember:string,rotationTick:number){
  const start=pool.length>6?rotationTick%pool.length:0;
  return [...pool.slice(start),...pool.slice(0,start)].slice(0,6) as Article[];
 }
+async function unarchivedNotificationArticles(dataMember:string){
+ const rows=await rpcValue(db,"insight_comment_notification_backfill_candidates",{p_member:dataMember,p_limit:3});
+ return a(rows).map((r:any):Article|null=>{
+  const key=s(r.article_key);
+  return /^n[0-9a-f]+$/i.test(key)?{key,title:s(r.title,"記事"),url:s(r.url),publishAt:s(r.publish_at)||null,commentCount:n(r.comment_count)}:null;
+ }).filter(Boolean) as Article[];
+}
 type ArticleFailure={articleKey:string;title:string;url:string;stage:"note"|"save";code:string;retryable:boolean};
 function articleSelection(body:any){
  const key=body.articleKey,keys=body.articleKeys,hasKey=key!==undefined&&key!==null,hasKeys=keys!==undefined;
@@ -111,9 +118,13 @@ async function refreshProfile(profile:any,hardDeadline:number,selectedKeys:strin
   const owned=new Map((data||[]).map((row:any)=>[String(row.article_key),row]));
   for(const key of selectedKeys){const row:any=owned.get(key);if(row)map.set(key,{key,title:String(row.title||"記事"),url:String(row.url||`${NOTE}/${noteId}/n/${key}`),publishAt:row.publish_at||null,commentCount:Number(row.comment_count||0)});else{articleFailures.push({articleKey:key,title:"記事",url:`${NOTE}/${noteId}/n/${key}`,stage:"note",code:"COMMENT_ARTICLE_NOT_FOUND",retryable:false});errors.push("COMMENT_ARTICLE_NOT_FOUND")}}
  }else{
-  const [recent,pending,repair]=await Promise.all([recentArticles(noteId,hardDeadline),pendingArticles(dataMember),missingArticles(dataMember,Math.floor(Date.now()/(manual?60000:900000)))]);missing=repair;
+  const [recent,pending,repair,unarchived]=await Promise.all([recentArticles(noteId,hardDeadline),pendingArticles(dataMember),missingArticles(dataMember,Math.floor(Date.now()/(manual?60000:900000))),unarchivedNotificationArticles(dataMember)]);missing=repair;
   // First comments must be discovered even when the cached catalog still says 0.
-  for(const art of recent.slice(0,5)){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of pending){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of missing)map.set(art.key,art);
+  // Missing comment anchors on older own articles must be collected before recent scans.
+  for(const art of unarchived)map.set(art.key,art);
+  for(const art of recent.slice(0,5)){map.set(art.key,art);notifyKeys.add(art.key)}
+  for(const art of pending){map.set(art.key,art);notifyKeys.add(art.key)}
+  for(const art of missing)map.set(art.key,art);
  }
  let inserted=0,scanned=0,changed=0,unchanged=0,latest:string|null=null,truncated=false,retryAfterMs=0;const pendingArticleKeys:string[]=[],articles=[...map.values()],checkedArticles:Article[]=[];
  for(const [index,art] of articles.entries()){
