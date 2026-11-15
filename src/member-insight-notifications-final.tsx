@@ -1,7 +1,7 @@
 import { MemberInsightOutgoingComments } from "./member-insight-outgoing-comments";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import { pendingCompletion, queueCompletion } from "./insight-completion-queue";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
@@ -205,6 +205,33 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const[rows,setRows]=useState<Row[]>(initial.rows),[kind,setKind]=useState(initial.selection.kind),[handlingStatus,setHandlingStatus]=useState(initial.selection.handlingStatus),[statusCounts,setStatusCounts]=useState<Record<string,number>>(initialView?.statusCounts||{}),[selectedDay,setSelectedDay]=useState(initial.selection.selectedDay),[page,setPage]=useState(initial.selection.page),[total,setTotal]=useState(initialView?.total??initial.rows.length),[loading,setLoading]=useState(!initialView),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(initialView?.updatedAt||""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>(initialView?.syncAt||"");
   const[visibleSelection,setVisibleSelection]=useState(initialView?selectionId(initial.selection):""),[visibleOwner,setVisibleOwner]=useState(selectionKey),[savedDisplayAt,setSavedDisplayAt]=useState(initial.cached?0:initial.saved?.savedAt||0);
   const[categoryQuery,setCategoryQuery]=useState("");
+  const[categoryDialogOpen,setCategoryDialogOpen]=useState(false);
+  const categoryDialogRef=useRef<HTMLDialogElement|null>(null);
+  useEffect(()=>{
+    if(!categoryDialogOpen)return;
+    const dialog=categoryDialogRef.current;
+    if(!dialog)return;
+    const y=window.scrollY,htmlOverflow=document.documentElement.style.overflow;
+    const bodyOverflow=document.body.style.overflow,bodyPosition=document.body.style.position;
+    const bodyTop=document.body.style.top,bodyWidth=document.body.style.width;
+    document.documentElement.style.overflow="hidden";
+    document.body.style.overflow="hidden";
+    document.body.style.position="fixed";
+    document.body.style.top="-"+y+"px";
+    document.body.style.width="100%";
+    if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+    return()=>{
+      if(typeof dialog.close==="function"&&dialog.open)dialog.close();
+      else dialog.removeAttribute("open");
+      document.documentElement.style.overflow=htmlOverflow;
+      document.body.style.overflow=bodyOverflow;
+      document.body.style.position=bodyPosition;
+      document.body.style.top=bodyTop;
+      document.body.style.width=bodyWidth;
+      window.scrollTo(0,y);
+    };
+  },[categoryDialogOpen]);
+  useEffect(()=>{setCategoryDialogOpen(false);setCategoryQuery("")},[selectionKey]);
   useEffect(()=>{NOTIFICATION_SELECTION_CACHE.set(selectionKey,{kind,handlingStatus,selectedDay,page})},[selectionKey,kind,handlingStatus,selectedDay,page]);
   const localEdits=useRef(new Map<string,Row>()),lastSnapshot=useRef("");
   const passiveDisplay=useRef({key:"",blocked:false});
@@ -456,24 +483,25 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     <div className="minf-filter-panel" aria-label="本人通知の表示条件">
       <div className="minf-category-field">
         <span>分類</span>
-        <select className="minf-category-native" aria-label="本人通知の分類（互換用）" tabIndex={-1} aria-hidden="true" value={kind} onChange={e=>{setPage(1);setKind(e.target.value)}}>{CATS.map(([id,label])=><option key={id} value={id}>{label}{categoryCounts[id]!==undefined?" ("+categoryCounts[id]+")":""}</option>)}</select>
-        <details className="minf-category-menu" onToggle={e=>{if(!e.currentTarget.open)setCategoryQuery("")}}>
-          <summary aria-label="通知の分類を選ぶ">{LABEL[kind]||"項目を選ぶ"}<span>{categoryCounts[kind]!==undefined?" ("+categoryCounts[kind]+")":""} ▾</span></summary>
-          <div className="minf-category-popover">
-            <input type="search" value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="分類名で検索" aria-label="通知の分類を検索" autoComplete="off" />
-            <div className="minf-category-options">
-              {CATEGORY_SECTIONS.map(section=>{
-                const q=categoryQuery.trim().toLocaleLowerCase("ja-JP"),options=CATS.filter(([id,label])=>sectionForCategory(id)===section&&(!q||label.toLocaleLowerCase("ja-JP").includes(q)||id.includes(q)));
-                return options.length?<section key={section}><h3>{section}</h3>{options.map(([id,label])=><button key={id} type="button" className={kind===id?"active":""} aria-pressed={kind===id} onClick={e=>{setPage(1);setKind(id);setCategoryQuery("");const el=e.currentTarget.closest("details");if(el)el.open=false}}><span>{label}</span>{categoryCounts[id]!==undefined?<b>{categoryCounts[id]}</b>:null}</button>)}</section>:null;
-              })}
-              {categoryQuery&&!CATS.some(([id,label])=>label.toLocaleLowerCase("ja-JP").includes(categoryQuery.trim().toLocaleLowerCase("ja-JP"))||id.includes(categoryQuery.trim().toLocaleLowerCase("ja-JP")))?<p>該当する項目はありません。</p>:null}
-            </div>
-          </div>
-        </details>
+        <button type="button" className="minf-category-launcher" aria-haspopup="dialog" aria-expanded={categoryDialogOpen} onClick={()=>setCategoryDialogOpen(true)}>
+          <span>{LABEL[kind]||"項目を選ぶ"}</span><small>{categoryCounts[kind]!==undefined?"("+categoryCounts[kind]+")":""} ▾</small>
+        </button>
       </div>
       <label><span>日付</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label>
       {selectedDay?<button type="button" onClick={()=>{setPage(1);setSelectedDay("")}}>全期間</button>:<span className="minf-filter-total">全期間</span>}
     </div>
+    {categoryDialogOpen ? createPortal(<dialog ref={categoryDialogRef} className="minf-category-dialog" aria-label="本人通知の分類を選ぶ" onCancel={e=>{e.preventDefault();setCategoryDialogOpen(false)}} onClose={()=>{setCategoryDialogOpen(false);setCategoryQuery("")}}>
+      <header><strong>通知の分類を選ぶ</strong><button type="button" className="minf-category-close" aria-label="閉じる" onClick={()=>setCategoryDialogOpen(false)}>閉じる ×</button></header>
+      <input type="search" autoFocus value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="項目名で検索" aria-label="分類名で検索" autoComplete="off" />
+      <div className="minf-category-dialog-list" tabIndex={0} aria-label="分類の一覧（この枠内だけをスクロール）">
+        {CATEGORY_SECTIONS.map(section=>{
+          const q=categoryQuery.trim().toLocaleLowerCase("ja-JP"),options=CATS.filter(([id,label])=>sectionForCategory(id)===section&&(!q||label.toLocaleLowerCase("ja-JP").includes(q)||id.includes(q)));
+          return options.length?<section key={section}><h3>{section}</h3>{options.map(([id,label])=><button key={id} type="button" className={kind===id?"active":""} aria-pressed={kind===id} onClick={()=>{setPage(1);setKind(id);setCategoryDialogOpen(false);setCategoryQuery("")}}><span>{label}</span>{categoryCounts[id]!==undefined?<b>{categoryCounts[id]}</b>:null}</button>)}</section>:null;
+        })}
+        {categoryQuery&&!CATS.some(([id,label])=>label.toLocaleLowerCase("ja-JP").includes(categoryQuery.trim().toLocaleLowerCase("ja-JP"))||id.includes(categoryQuery.trim().toLocaleLowerCase("ja-JP")))?<p>該当する分類はありません。</p>:null}
+      </div>
+      <footer>数字は保存済み通知の件数です。未取得の通知は含まれません。</footer>
+    </dialog>,document.body) : null}
     <MemberInsightOutgoingComments noteId={selfId} revision={revision}/>
     <details className="minf-detail">
       <summary>詳細・精度・再分類 <span>開く / 閉じる ▾</span></summary>
