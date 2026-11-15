@@ -86,7 +86,7 @@ export function MemberInsightMagazineAdditionAudit({ magazineKey, selectedDay }:
       if (current.current === controller) { current.current = null; setBusy(false); }
     }
   }
-  useEffect(() => { void check(); }, [magazineKey, day]);
+  useEffect(() => { void check(); }, [magazineKey, day, selectedDay]);
   const latestEvent=events[0];
   return <section className="mimag-audit" aria-label="マガジン追加の通知時刻">
     <div className="mimag-audit-head"><b>追加通知の日時</b><small>{busy?"時刻を確認中…":latestEvent?"最新 "+jstTime(latestEvent.occurred_at || latestEvent.captured_at):checkedDay?"該当通知なし":"保存履歴を照合"}</small></div>
