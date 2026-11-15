@@ -134,7 +134,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const [savedDisplay,setSavedDisplay]=useState(initialSaved?.savedAt||0),[loadedPage,setLoadedPage]=useState(initialRetained?.page||1),[moreLoading,setMoreLoading]=useState(false);
  const [articleRefresh,setArticleRefresh]=useState(0);
  const [collectionFailures,setCollectionFailures]=useState<ArticleFailure[]>([]),[collectionRetryAt,setCollectionRetryAt]=useState(0),[collectionNow,setCollectionNow]=useState(Date.now());
- const loadSeq=useRef(0),pageBusy=useRef(false),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
+ const loadSeq=useRef(0),pageBusy=useRef(false),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null),focusRecheckAt=useRef(0);
  const articleController=useRef<AbortController|null>(null),detailLoads=useRef(new Set<string>());
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  const stateScope=useRef(viewScope),controlsReady=stateScope.current===viewScope;
@@ -352,6 +352,22 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   else void loadAll(false,undefined,exhaustive);
   return cleanup;
  },[status,day,articleKey,query,revision,persistKey,token,controlsReady]);
+ // Revalidate a stale saved view when the user returns from note, without
+ // running polling or repeating the same request on rapid focus events.
+ useEffect(()=>{
+  if(!controlsReady)return;
+  const onReturn=()=>{
+   if(document.visibilityState==="hidden"||(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")!==token)return;
+   if(Date.now()-focusRecheckAt.current<60_000)return;
+   const cached=COMMENT_CACHE.get(cacheKey);
+   if(cached&&isFreshInsightView(cached.at,60_000))return;
+   focusRecheckAt.current=Date.now();
+   reloadSaved.current?.();
+  };
+  window.addEventListener("focus",onReturn);
+  document.addEventListener("visibilitychange",onReturn);
+  return()=>{window.removeEventListener("focus",onReturn);document.removeEventListener("visibilitychange",onReturn)};
+ },[controlsReady,cacheKey,token]);
  // Overflow copies may become available after the bounded startup attempt.
  // Restore display only: never restart a request or let a late copy beat live data.
  useEffect(()=>{
