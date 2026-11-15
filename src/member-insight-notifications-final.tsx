@@ -483,6 +483,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     <div className="minf-filter-panel" aria-label="本人通知の表示条件">
       <div className="minf-category-field">
         <span>分類</span>
+        <select className="minf-category-native" aria-label="本人通知の分類（互換用）" tabIndex={-1} aria-hidden="true" value={kind} onChange={e=>{setPage(1);setKind(e.target.value)}}>{CATS.map(([id,label])=><option key={id} value={id}>{label}{categoryCounts[id]!==undefined?" ("+categoryCounts[id]+")":""}</option>)}</select>
         <button type="button" className="minf-category-launcher" aria-haspopup="dialog" aria-expanded={categoryDialogOpen} onClick={()=>setCategoryDialogOpen(true)}>
           <span>{LABEL[kind]||"項目を選ぶ"}</span><small>{categoryCounts[kind]!==undefined?"("+categoryCounts[kind]+")":""} ▾</small>
         </button>
