@@ -172,3 +172,28 @@ test('先頭は最終保存のクリエイターになり、再表示でも差�
  const body=document.querySelector('.minf-list').textContent;assert.ok(body.indexOf('最終保存の人物')<body.indexOf('更新時の人物'));assert.equal(requests.find(x=>x.action==='recent').since,null,'new launch verifies newest data instead of relying on the prior watermark');assert.equal(localStorage.getItem('mumei-notification-recent-watermark:tester'),'2026-10-04T00:00:00Z','verified checkpoint remains stored');
  await act(async()=>h.root.unmount());h.dom.window.close();
 });
+
+test('通知の絞り込みは件数の範囲を明示し、履歴を消さずに全件へ戻せる',async t=>{
+ const h=setup();t.after(async()=>{await act(async()=>h.root.unmount());h.dom.window.close()});
+ const row={id:'test-100',notification_type:'rating',display_category:'rating',raw_text:'高評価',actor_name:'人物',actor_url:'https://note.com/person',occurred_at:'2026-11-15T08:00:00Z'};
+ const feeds=[];
+ globalThis.fetch=async(url,init={})=>{
+  if(String(url).includes('creator-icons'))return new Promise(()=>{});
+  const b=JSON.parse(init.body||'{}');
+  feeds.push(b);
+  return {ok:true,json:async()=>({ok:true,noteId:'tester',rows:[row],total:b.kind==='rating'?1:12345,categoryCounts:{all:12345,rating:1},categoryPreview:{},statusCounts:{all:12345,pending:12345,completed:0}})};
+ };
+ const {MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
+ await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,35))});
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/全履歴の表示/);
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/12,345件/);
+ const select=document.querySelector('.minf-category-native');
+ await act(async()=>{select.value='rating';select.dispatchEvent(new window.Event('change',{bubbles:true}));await new Promise(r=>setTimeout(r,35))});
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/絞り込み中/);
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/1件/);
+ await act(async()=>{document.querySelector('.minf-all-history-scope button').click();await new Promise(r=>setTimeout(r,35))});
+ assert.equal(document.querySelector('.minf-category-native').value,'all');
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/全履歴の表示/);
+ assert.match(document.querySelector('.minf-all-history-scope').textContent,/12,345件/);
+ assert.ok(feeds.some(x=>x.kind==='all'&&!x.day&&x.handlingStatus==='all'));
+});
