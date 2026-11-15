@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.11.02.2",
+  "appVersion": "2026.11.15.1",
   "notificationVersion": "3.6.68",
   "dashboardVersion": "1.7.7",
-  "releasedAt": "2026-11-09",
+  "releasedAt": "2026-11-15",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.6.68：起動直後のフィルター停止と、通知パネルを開き直した時の再表示漏れを修正。登録済み設定と保存済み通知は保持。",
+  "note": "INSIGHT本体：マガジンの日付検索に『投稿日』を明記し、追加通知日を照合する機能を追加。本人通知の分類を検索・グループ選択式に改善。掲示板のコメント本文と個別記事の追加日時は引き続き確認中です。",
   "dmVersion": "1.4.20",
   "dmLabel": "DM同期"
 }
