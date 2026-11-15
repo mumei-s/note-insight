@@ -14,8 +14,8 @@ test('同一セッション内の古いコメントキャッシュは表示用�
   assert.equal(isFreshInsightView(start,60_000),false);
   assert.equal(isFreshInsightView(Date.now()-1000,60_000),true);
  }finally{Date.now=nativeNow}
- assert.match(source,/cached\.revision===revision&&!cached\.invalidated&&isFreshInsightView\(cached\.at,60_000\)/);
- assert.match(source,/saved\.revision===revision&&isFreshInsightView\(saved\.at,120_000\)/);
+ assert.match(source,/cached\.revision===revision&&!cached\.invalidated&&canRetainInsightView\(cached\.at\)/);
+ assert.match(source,/saved\.revision===revision&&canRetainInsightView\(saved\.at\)/);
 });
 test('他のタブから戻ったときは古い履歴だけ再検証し、連続focusや別アカウントでは再取得しない',()=>{
  const start=source.indexOf('const onReturn=()=>{'),end=source.indexOf('\n  };',start);
