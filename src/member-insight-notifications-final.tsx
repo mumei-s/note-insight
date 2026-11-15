@@ -51,6 +51,14 @@ function filterBoard(account:string,kind:string,day:string,status="all"){
 
 const CATS=[["all","すべて"],["creator_article_posted","記事投稿・更新"],["badge","バッジ獲得"],["purchase_message","購入記事のメッセージ"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_article_added","メンシプ記事追加"],["membership_article_updated","メンシプ記事更新"],["membership_magazine_added","メンシプ特典マガジン追加"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["store_started","お店をはじめました"],["question_answer","質問への回答"],["purchased_article_updated","購入した記事の更新"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["image_used","画像の使用"],["other","その他・未分類"]] as const;
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
+const CATEGORY_SECTIONS=["すべて","マガジン","メンシプ","コメント・交流","その他"] as const;
+function sectionForCategory(id:string):typeof CATEGORY_SECTIONS[number]{
+ if(id==="all")return"すべて";
+ if(id.startsWith("magazine_")||id==="my_article_magazine_added")return"マガジン";
+ if(id.startsWith("membership_"))return"メンシプ";
+ if(["comment_like","reply_self","reply_other","reply_unknown","tip","quote","image_used"].includes(id))return"コメント・交流";
+ return"その他";
+}
 const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",store_started:"🛍",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",image_used:"🖼",other:"🔔"};
 
 async function post(body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);const abort=()=>c.abort();signal?.addEventListener("abort",abort,{once:true});try{const r=await fetchInsightResource(FEED,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal},45_000);const p=await r.json().catch(()=>{throw Object.assign(new Error("通知の応答内容を確認できませんでした"),{status:r.status})});if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("INSIGHT_ACCOUNT_CHANGED");if(r.status===402)throw new Error("INSIGHT保存先がSupabaseの利用制限中です（HTTP 402）");if(!r.ok||p?.ok!==true)throw Object.assign(new Error(p?.error||"INSIGHT_API_ERROR"),{status:r.status});if((!body.action||body.action==="recent")&&(!Array.isArray(p.rows)||!p.noteId||(!body.action&&(!Number.isFinite(Number(p.total))||Number(p.total)<0))))throw new Error("通知一覧の応答が不完全です");return p}finally{window.clearTimeout(timer);signal?.removeEventListener("abort",abort)}}
@@ -196,6 +204,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const initialView=initial.cached||initial.saved?.value;
   const[rows,setRows]=useState<Row[]>(initial.rows),[kind,setKind]=useState(initial.selection.kind),[handlingStatus,setHandlingStatus]=useState(initial.selection.handlingStatus),[statusCounts,setStatusCounts]=useState<Record<string,number>>(initialView?.statusCounts||{}),[selectedDay,setSelectedDay]=useState(initial.selection.selectedDay),[page,setPage]=useState(initial.selection.page),[total,setTotal]=useState(initialView?.total??initial.rows.length),[loading,setLoading]=useState(!initialView),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(initialView?.updatedAt||""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>(initialView?.syncAt||"");
   const[visibleSelection,setVisibleSelection]=useState(initialView?selectionId(initial.selection):""),[visibleOwner,setVisibleOwner]=useState(selectionKey),[savedDisplayAt,setSavedDisplayAt]=useState(initial.cached?0:initial.saved?.savedAt||0);
+  const[categoryQuery,setCategoryQuery]=useState("");
   useEffect(()=>{NOTIFICATION_SELECTION_CACHE.set(selectionKey,{kind,handlingStatus,selectedDay,page})},[selectionKey,kind,handlingStatus,selectedDay,page]);
   const localEdits=useRef(new Map<string,Row>()),lastSnapshot=useRef("");
   const passiveDisplay=useRef({key:"",blocked:false});
@@ -445,7 +454,23 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     </div>
     <nav className="minf-handling-tabs" aria-label="本人通知の対応状況">{[["all","すべて"],["pending","未対応"],["completed","対応済み"]].map(([id,label])=><button key={id} className={handlingStatus===id?"active":""} aria-pressed={handlingStatus===id} onClick={()=>{setPage(1);setHandlingStatus(id)}}>{label}{statusCounts[id]!==undefined?<small>{statusCounts[id]}</small>:null}</button>)}<a href="?insightMode=favorites#dashboard">★ お気に入り</a></nav>
     <div className="minf-filter-panel" aria-label="本人通知の表示条件">
-      <label><span>分類</span><select value={kind} onChange={e=>{setPage(1);setKind(e.target.value)}}>{CATS.map(([id,label])=><option key={id} value={id}>{label}{categoryCounts[id]!==undefined?` (${categoryCounts[id]})`:""}</option>)}</select></label>
+      <div className="minf-category-field">
+        <span>分類</span>
+        <select className="minf-category-native" aria-label="本人通知の分類（互換用）" tabIndex={-1} aria-hidden="true" value={kind} onChange={e=>{setPage(1);setKind(e.target.value)}}>{CATS.map(([id,label])=><option key={id} value={id}>{label}{categoryCounts[id]!==undefined?" ("+categoryCounts[id]+")":""}</option>)}</select>
+        <details className="minf-category-menu" onToggle={e=>{if(!e.currentTarget.open)setCategoryQuery("")}}>
+          <summary aria-label="通知の分類を選ぶ">{LABEL[kind]||"項目を選ぶ"}<span>{categoryCounts[kind]!==undefined?" ("+categoryCounts[kind]+")":""} ▾</span></summary>
+          <div className="minf-category-popover">
+            <input type="search" value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="分類名で検索" aria-label="通知の分類を検索" autoComplete="off" />
+            <div className="minf-category-options">
+              {CATEGORY_SECTIONS.map(section=>{
+                const q=categoryQuery.trim().toLocaleLowerCase("ja-JP"),options=CATS.filter(([id,label])=>sectionForCategory(id)===section&&(!q||label.toLocaleLowerCase("ja-JP").includes(q)||id.includes(q)));
+                return options.length?<section key={section}><h3>{section}</h3>{options.map(([id,label])=><button key={id} type="button" className={kind===id?"active":""} aria-pressed={kind===id} onClick={e=>{setPage(1);setKind(id);setCategoryQuery("");const el=e.currentTarget.closest("details");if(el)el.open=false}}><span>{label}</span>{categoryCounts[id]!==undefined?<b>{categoryCounts[id]}</b>:null}</button>)}</section>:null;
+              })}
+              {categoryQuery&&!CATS.some(([id,label])=>label.toLocaleLowerCase("ja-JP").includes(categoryQuery.trim().toLocaleLowerCase("ja-JP"))||id.includes(categoryQuery.trim().toLocaleLowerCase("ja-JP")))?<p>該当する項目はありません。</p>:null}
+            </div>
+          </div>
+        </details>
+      </div>
       <label><span>日付</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label>
       {selectedDay?<button type="button" onClick={()=>{setPage(1);setSelectedDay("")}}>全期間</button>:<span className="minf-filter-total">全期間</span>}
     </div>
