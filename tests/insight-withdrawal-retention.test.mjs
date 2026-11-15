@@ -103,7 +103,7 @@ test('管理者の退会処理は認証停止・収集停止・非公開化を�
   assert.match(access, /if\(action==="owner-reject"\|\|action==="owner-revoke"\|\|action==="owner-remove"\)/);
   assert.match(access, /insight_member_sessions"\)\.update\(\{revoked_at:now\}\)/);
   assert.match(access, /if\(action==="owner-remove"\)await supabase\.from\("insight_notification_ingest_tokens"\)\.update\(\{revoked_at:now\}\)/);
-  assert.match(access, /await publicParticipantUpsert\(next,false\);return json\(req,\{ok:true,application:safeApp\(next\)\}\)/);
+  assert.match(access, /await publicParticipantUpsert\(next,false\);await notificationProfileUpsert\(next,false\);return json\(req,\{ok:true,application:safeApp\(next\)\}\)/);
   assert.match(access, /await notificationProfileUpsert\(next,false\)/);
   assert.doesNotMatch(access, /from\("insight_participants_public"\)\.delete\(/);
   assert.doesNotMatch(access, /from\("insight_(?:notifications|public_comments|public_likes|relations|relation_events|dm_messages)"\)\.delete\(/);
