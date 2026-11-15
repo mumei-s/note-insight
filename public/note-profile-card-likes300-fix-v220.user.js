@@ -4279,7 +4279,7 @@ function patchHistoryFilterPanel(panel,detail){
  (detail.querySelector('.special-actions')||detail.lastElementChild)?.before(controls);
  let saved={};try{saved=JSON.parse(localStorage.getItem(HISTORY_FILTER_PREF)||'{}')||{}}catch{}
  const field=name=>controls.querySelector('[data-history-'+name+']');
- field('period').value=['today','date','range','all'].includes(saved.period)?saved.period:'today';
+ field('period').value=['today','date','range','all'].includes(saved.period)?saved.period:'all';
  field('from').value=validHistoryDate(saved.fromDate||'')?saved.fromDate:historyToday();
  field('to').value=validHistoryDate(saved.toDate||'')?saved.toDate:historyToday();
  field('articles').value=saved.articles==='selected'?'selected':'all';field('article').value=String(saved.article||'');
@@ -4298,15 +4298,13 @@ function historyOptions(run=null){
  if(run?.likesHistoryFix230||run?.likesHistory){
   // Old quota-fragment backups did not store a count; their original plan
   // was 300 people. The new UI default must not reinterpret those backups.
-  const count=Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.historyRequestedCount||run.count)||300;
+  const count=Number(run.historyRequestedCount)||(Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.count)||300);
   return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count,historyFilter:run.historyFilter||null};
  }
- const historyFilter=selectedHistoryFilter();
- if(historyFilter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter};
  const panel=document.getElementById(PANEL),mode=panel?.querySelector('[data-mode]')?.value==='all'?'all':'number';
  const count=Number(panel?.querySelector('[data-count]')?.value||200);
  if(mode==='number'&&(!Number.isInteger(count)||count<1||count>HISTORY_CANDIDATE_CAP))throw new Error('スキ履歴の件数は1〜'+HISTORY_CANDIDATE_CAP+'人で指定してください');
- return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count};
+ return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count,historyFilter:selectedHistoryFilter()};
 }
 function checkpointHistoryOptions(saved){
  if(saved?.historyFilter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:saved.historyFilter};
@@ -4314,7 +4312,7 @@ function checkpointHistoryOptions(saved){
  if(token)return{mode:token==='all'?'all':'number',count:token==='all'?HISTORY_CANDIDATE_CAP:Number(token),target:token==='all'?Infinity:Number(token)};
  return historyOptions();
 }
-function historyExportCount(options){return options.mode==='all'?HISTORY_CANDIDATE_CAP:Math.min(HISTORY_CANDIDATE_CAP,Math.max(options.count+20,options.count*3));}
+function historyExportCount(options){return options.historyFilter||options.mode==='all'?HISTORY_CANDIDATE_CAP:Math.min(HISTORY_CANDIDATE_CAP,Math.max(options.count+20,options.count*3));}
 function prepareLikesHistoryExport(options=historyOptions()){
  if(exportWaiter)return exportWaiter.promise;
  const requestId='likes300-'+Date.now()+'-'+Math.random().toString(36).slice(2),url=new URL('https://mumei-s.github.io/note-insight/note-profile-card-paster-history-export.html');
