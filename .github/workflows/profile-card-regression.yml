@@ -1,0 +1,27 @@
+name: Profile card regression
+on:
+  push:
+    paths:
+      - 'public/note-profile-card-likes300-fix-v220.user.js'
+      - 'tests/profile-card-policy.cjs'
+      - '.github/workflows/profile-card-regression.yml'
+  pull_request:
+    paths:
+      - 'public/note-profile-card-likes300-fix-v220.user.js'
+      - 'tests/profile-card-policy.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: node --check public/note-profile-card-likes300-fix-v220.user.js
+      - name: Run policy regression
+        run: node tests/profile-card-policy.cjs
