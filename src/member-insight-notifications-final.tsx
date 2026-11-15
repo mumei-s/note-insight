@@ -470,7 +470,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const hasNotificationFilters=kind!=="all"||handlingStatus!=="all"||Boolean(selectedDay);
   const notificationScopeLabel=[kind!=="all"?(LABEL[kind]||kind):"全分類",selectedDay?"日付 "+dayLabel(selectedDay):"全期間",handlingStatus==="pending"?"未対応のみ":handlingStatus==="completed"?"対応済みのみ":"対応状況すべて"].join("・");
   function showEveryNotification(){
-    if(!hasNotificationFilters&&page===1){void load(1,"all",false,"",true);return}
+    if(!hasNotificationFilters){void load(1,"all",false,"",true);return}
     setKind("all");setHandlingStatus("all");setSelectedDay("");setPage(1);
   }
   const readerMode=String(readerStatus?.lastRunMode||"");
@@ -488,7 +488,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     <nav className="minf-handling-tabs" aria-label="本人通知の対応状況">{[["all","すべて"],["pending","未対応"],["completed","対応済み"]].map(([id,label])=><button key={id} className={handlingStatus===id?"active":""} aria-pressed={handlingStatus===id} onClick={()=>{setPage(1);setHandlingStatus(id)}}>{label}{statusCounts[id]!==undefined?<small>{statusCounts[id]}</small>:null}</button>)}<a href="?insightMode=favorites#dashboard">★ お気に入り</a></nav>
     <div className="minf-all-history-scope" role="status" aria-live="polite">
       <div><strong>{hasNotificationFilters?"絞り込み中":"全履歴の表示"}</strong><span>{notificationScopeLabel}</span><small>{visibleSelection===selectionId({kind,selectedDay,handlingStatus,page})?Number(total).toLocaleString("ja-JP")+"件（"+page+" / "+pages+"ページ）":"件数確認中…"}</small></div>
-      <button type="button" onClick={showEveryNotification} disabled={loading&&hasNotificationFilters}>{hasNotificationFilters?"全件に戻す":"全件を再確認"}</button>
+      <button type="button" onClick={showEveryNotification}>{hasNotificationFilters?"全件に戻す":"全件を再確認"}</button>
     </div>
     <div className="minf-filter-panel" aria-label="本人通知の表示条件">
       <div className="minf-category-field">
