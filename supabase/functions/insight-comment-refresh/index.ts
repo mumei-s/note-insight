@@ -112,7 +112,8 @@ async function refreshProfile(profile:any,hardDeadline:number,selectedKeys:strin
   for(const key of selectedKeys){const row:any=owned.get(key);if(row)map.set(key,{key,title:String(row.title||"記事"),url:String(row.url||`${NOTE}/${noteId}/n/${key}`),publishAt:row.publish_at||null,commentCount:Number(row.comment_count||0)});else{articleFailures.push({articleKey:key,title:"記事",url:`${NOTE}/${noteId}/n/${key}`,stage:"note",code:"COMMENT_ARTICLE_NOT_FOUND",retryable:false});errors.push("COMMENT_ARTICLE_NOT_FOUND")}}
  }else{
   const [recent,pending,repair]=await Promise.all([recentArticles(noteId,hardDeadline),pendingArticles(dataMember),missingArticles(dataMember,Math.floor(Date.now()/(manual?60000:900000)))]);missing=repair;
-  for(const art of recent.filter(x=>x.commentCount>0).slice(0,5)){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of pending){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of missing)map.set(art.key,art);
+  // First comments must be discovered even when the cached catalog still says 0.
+  for(const art of recent.slice(0,5)){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of pending){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of missing)map.set(art.key,art);
  }
  let inserted=0,scanned=0,changed=0,unchanged=0,latest:string|null=null,truncated=false,retryAfterMs=0;const pendingArticleKeys:string[]=[],articles=[...map.values()],checkedArticles:Article[]=[];
  for(const [index,art] of articles.entries()){
