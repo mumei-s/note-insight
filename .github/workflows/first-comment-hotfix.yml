@@ -1,0 +1,26 @@
+name: INSIGHT first-comment capture hotfix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/insight-comment-refresh/index.ts'
+      - 'tests/comment-refresh-recovery.test.mjs'
+      - '.github/workflows/first-comment-hotfix.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  zero-count-first-comment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/comment-refresh-recovery.test.mjs tests/comment-checkpoint-batch.test.mjs
+      - run: npm run build

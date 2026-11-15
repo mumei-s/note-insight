@@ -8,7 +8,7 @@ import {PGlite} from '@electric-sql/pglite';
 
 const source=fs.readFileSync('supabase/functions/insight-comment-refresh/index.ts','utf8');
 const shared=fs.readFileSync('supabase/functions/_shared/egress-20260930.ts','utf8');
-function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,updateError=false,session=true,missingPool=[],articles=[],noteFetch=null,clock=null,onSave=null}={}){
+function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,updateError=false,session=true,missingPool=[],articles=[],noteFetch=null,clock=null,onSave=null,catalogComments=1}={}){
  const calls=[],saved=[],notes=[],queries=[];let handler;
  const db={rpc:async(name,args)=>{
   calls.push({name,args});
@@ -48,7 +48,7 @@ function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveEr
   console:{error:()=>{}},setTimeout:(cb,ms)=>ms<100?(queueMicrotask(cb),0):setTimeout(cb,ms),clearTimeout,
   fetch:async(url,init)=>{notes.push(String(url));
    if(noteFetch){const response=await noteFetch(String(url),init);if(response!==undefined)return response}
-   if(String(url).includes('/contents?'))return Response.json({data:{contents:[{key:'n123',name:'article',commentCount:1}]}});
+   if(String(url).includes('/contents?'))return Response.json({data:{contents:[{key:'n123',name:'article',commentCount:catalogComments}]}});
    if(String(url).includes('/note_comments?'))return Response.json({data:[{key:'comment1',user:{urlname:'peer',nickname:'相手'},comment:'取得本文',created_at:'2026-10-10T00:00:00Z'}],next_page:null});
    throw Error('Unexpected fetch '+url);
   },createClient:()=>db,Deno:{env:{get:()=>''},serve:h=>handler=h}});
@@ -63,6 +63,16 @@ test('ownerのapplication UUIDを通知FKへ流さず、正本ownerへ保存す�
  assert.equal(p.ok,true);assert.equal(p.changedComments,1);assert.equal(h.saved[0].member_id,'owner');assert.equal(h.saved[0].body,'取得本文');
  assert.equal(h.calls.find(x=>x.name==='insight_comment_refresh_claim').args.p_member,'owner');
  assert.ok(h.notes[0].includes('disabled_pinned=true'),'固定記事で最新記事が取得候補から落ちない');
+});
+test('最新記事のコメント数が0と報告されても、初めて付いたコメントを取得・保存する',async()=>{
+ const h=edge({catalogComments:0}),p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,true);
+ assert.equal(p.articles,1);
+ assert.equal(p.changedComments,1);
+ assert.equal(h.saved.length,1);
+ assert.equal(h.saved[0].article_key,'n123');
+ assert.equal(h.saved[0].body,'取得本文');
+ assert.ok(h.notes.some(url=>url.includes('n123/note_comments?')));
 });
 test('参加者は本人のUUIDだけへ保存し、bodyの任意scope指定を採用しない',async()=>{
  const h=edge({member:'participant-uuid',noteId:'participant'});const r=await h.handler(memberRequest());
