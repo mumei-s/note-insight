@@ -184,3 +184,20 @@ dialog.minf-category-dialog footer{
 @media(max-width:620px){
   dialog.minf-category-dialog{width:calc(100vw - 20px);height:min(72dvh,640px)}
 }
+
+
+/* Clear current notification scope before the compact picker. Never truncate server totals. */
+.minf .minf-all-history-scope{
+  box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  margin:8px 0;padding:9px 11px;border:1px solid #497b91;border-radius:12px;
+  background:linear-gradient(135deg,#0d2636,#102635);color:#eefbff;
+}
+.minf .minf-all-history-scope>div{display:grid;min-width:0;gap:3px;flex:1 1 190px}
+.minf .minf-all-history-scope strong{font-size:13px;line-height:1.3;color:#b8f0ff}
+.minf .minf-all-history-scope span{font-size:12px;line-height:1.35;color:#d1e9f3;overflow-wrap:anywhere}
+.minf .minf-all-history-scope small{font-size:12px;font-weight:850;color:#e6fdff;font-variant-numeric:tabular-nums}
+.minf .minf-all-history-scope button{
+  flex:0 0 auto;min-height:42px;padding:8px 12px;border:1px solid #7edbf3;border-radius:9px;
+  background:#17465a;color:#f3fbff;font-size:12px;font-weight:900;line-height:1.25;
+}
+.minf .minf-all-history-scope button:disabled{opacity:.6}
