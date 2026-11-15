@@ -3,6 +3,7 @@ import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
 import { canRetainInsightView } from "./insight-view-lifecycle";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { MemberInsightMagazineAdditionAudit } from "./member-insight-magazine-addition-audit";
 import "./member-insight-magazines.css";
 
 type Row = Record<string, any>;
@@ -180,11 +181,13 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
         <div className="miu-mag-stats"><span><b>{number(r.memberCount ?? members.length)}</b><small>参加人数</small></span><span><b>{number(r.followerCount)}</b><small>フォロワー</small></span><span><b>{number(r.noteCount)}</b><small>記事数</small></span></div>
         {members.length ? <div className="miu-member-faces" aria-label="参加クリエイター">{members.slice(0, 8).map((m: Row, i: number) => <a key={m.id || m.urlname || i} href={m.profileUrl || (creatorNoteId(m) ? `https://note.com/${creatorNoteId(m)}` : undefined)} target="_blank" rel="noreferrer" title={m.nickname || m.urlname}><CreatorAvatar person={m} name={m.nickname || m.urlname} className="miu-avatar" /></a>)}</div> : null}
         <div className="miu-mag-actions"><button className={expanded ? "active" : ""} aria-expanded={expanded} aria-controls={panelId} onClick={() => toggle(key)}>{expanded ? "検索を閉じる ↑" : "記事検索 ↓"}</button><a href={r.url} target="_blank" rel="noreferrer">noteで開く ↗</a></div>
-        {expanded ? <div id={panelId} className="miu-mag-search"><div className="miu-calendar-tools"><label><span>記事日</span><input type="date" value={state.day} onChange={e => { const value = e.target.value; patch(key, { day: value }); void searchArticles(r, value, state.query); }} /></label><input value={state.query} onChange={e => patch(key, { query: e.target.value })} onKeyDown={e => { if (e.key === "Enter") void searchArticles(r, state.day, state.query); }} placeholder="記事タイトル・投稿者" aria-label="記事タイトル・投稿者" /><button disabled={state.busy} onClick={() => void searchArticles(r, state.day, state.query)}>{state.busy ? "検索中…" : "検索"}</button>{state.busy ? <button onClick={stop}>中止</button> : null}</div>
+        {expanded ? <div id={panelId} className="miu-mag-search"><div className="miu-calendar-tools"><label><span>投稿日</span><input type="date" value={state.day} onChange={e => { const value = e.target.value; patch(key, { day: value }); void searchArticles(r, value, state.query); }} /></label><input value={state.query} onChange={e => patch(key, { query: e.target.value })} onKeyDown={e => { if (e.key === "Enter") void searchArticles(r, state.day, state.query); }} placeholder="記事タイトル・投稿者" aria-label="記事タイトル・投稿者" /><button disabled={state.busy} onClick={() => void searchArticles(r, state.day, state.query)}>{state.busy ? "検索中…" : "検索"}</button>{state.busy ? <button onClick={stop}>中止</button> : null}</div>
           {state.busy ? <SearchProgress key={state.signature} count={list.length} /> : <p className="mimag-result-status" role="status">{state.searched ? `検索結果 ${number(list.length)}件${state.total && state.total > list.length ? ` / ${number(state.total)}件` : ""}` : `最近の記事 ${number(list.length)}件`}<small>{state.searched ? "このマガジン内の検索結果" : "日付を選ぶと自動検索"}</small></p>}
           {state.error ? <p className="miu-error" role="status">{state.error}</p> : null}
-          <div className="miu-mag-articles">{list.map(a => <a key={a.key || a.url} href={a.url} target="_blank" rel="noreferrer"><time>{date(a.publishAt || a.publish_at)}</time><b>{a.title}</b><span className="mimag-author"><CreatorAvatar person={a.author} name={a.author?.nickname || a.author?.urlname} className="miu-avatar" /><small>{a.author?.nickname || a.author?.urlname || "投稿者"}</small></span></a>)}</div>
-          {!state.busy && !state.error && !list.length ? <p className="miu-source">条件に合う記事はありません。日付は日本時間で検索します。</p> : null}
+          <p className="mimag-result-date-help">ここは記事の公開日で検索しています。マガジンへの追加日を調べる場合は下の「追加した日を確認する」を開いてください。</p>
+           <MemberInsightMagazineAdditionAudit magazineKey={key} selectedDay={state.day} />
+           <div className="miu-mag-articles">{list.map(a => <a key={a.key || a.url} href={a.url} target="_blank" rel="noreferrer"><time title="記事の公開日">公開 {date(a.publishAt || a.publish_at)}</time><b>{a.title}</b><span className="mimag-author"><CreatorAvatar person={a.author} name={a.author?.nickname || a.author?.urlname} className="miu-avatar" /><small>{a.author?.nickname || a.author?.urlname || "投稿者"}</small></span></a>)}</div>
+          {!state.busy && !state.error && !list.length ? <p className="miu-source">指定した公開日の記事は見つかりませんでした。追加日での判定は通知記録で確認してください。</p> : null}
         </div> : null}
       </article>;
     })}</div> : <p className="miu-empty">条件に合うマガジンはありません。</p>}
