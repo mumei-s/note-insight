@@ -1,0 +1,26 @@
+name: INSIGHT saved-history deletion guard checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/retention/insight_profile_history_guard.sql'
+      - 'tests/member-profile-history-guard.test.mjs'
+      - '.github/workflows/member-history-guard-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  member-history-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --test tests/member-profile-history-guard.test.mjs
+      - run: npm run build
