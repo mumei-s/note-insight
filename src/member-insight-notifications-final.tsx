@@ -492,7 +492,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     </div>
     {categoryDialogOpen ? createPortal(<dialog ref={categoryDialogRef} className="minf-category-dialog" aria-label="本人通知の分類を選ぶ" onCancel={e=>{e.preventDefault();setCategoryDialogOpen(false)}} onClose={()=>{setCategoryDialogOpen(false);setCategoryQuery("")}}>
       <header><strong>通知の分類を選ぶ</strong><button type="button" className="minf-category-close" aria-label="閉じる" onClick={()=>setCategoryDialogOpen(false)}>閉じる ×</button></header>
-      <input type="search" autoFocus value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="項目名で検索" aria-label="分類名で検索" autoComplete="off" />
+      <input type="search" value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="項目名で検索" aria-label="分類名で検索" autoComplete="off" />
       <div className="minf-category-dialog-list" tabIndex={0} aria-label="分類の一覧（この枠内だけをスクロール）">
         {CATEGORY_SECTIONS.map(section=>{
           const q=categoryQuery.trim().toLocaleLowerCase("ja-JP"),options=CATS.filter(([id,label])=>sectionForCategory(id)===section&&(!q||label.toLocaleLowerCase("ja-JP").includes(q)||id.includes(q)));
