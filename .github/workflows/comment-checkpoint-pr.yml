@@ -1,0 +1,28 @@
+name: INSIGHT comment checkpoint batching checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/insight-comment-refresh/index.ts'
+      - 'supabase/retention/insight_comment_mark_articles_checked.sql'
+      - 'tests/comment-refresh-recovery.test.mjs'
+      - 'tests/comment-checkpoint-batch.test.mjs'
+      - '.github/workflows/comment-checkpoint-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  comment-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/comment-refresh-recovery.test.mjs tests/comment-checkpoint-batch.test.mjs
+      - run: npm run build

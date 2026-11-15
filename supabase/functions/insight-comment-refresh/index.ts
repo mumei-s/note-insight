@@ -114,7 +114,7 @@ async function refreshProfile(profile:any,hardDeadline:number,selectedKeys:strin
   const [recent,pending,repair]=await Promise.all([recentArticles(noteId,hardDeadline),pendingArticles(dataMember),missingArticles(dataMember,Math.floor(Date.now()/(manual?60000:900000)))]);missing=repair;
   for(const art of recent.filter(x=>x.commentCount>0).slice(0,5)){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of pending){map.set(art.key,art);notifyKeys.add(art.key)}for(const art of missing)map.set(art.key,art);
  }
- let inserted=0,scanned=0,changed=0,unchanged=0,latest:string|null=null,truncated=false,retryAfterMs=0;const pendingArticleKeys:string[]=[],articles=[...map.values()];
+ let inserted=0,scanned=0,changed=0,unchanged=0,latest:string|null=null,truncated=false,retryAfterMs=0;const pendingArticleKeys:string[]=[],articles=[...map.values()],checkedArticles:Article[]=[];
  for(const [index,art] of articles.entries()){
   if(Date.now()>hardDeadline-3000){truncated=true;pendingArticleKeys.push(...articles.slice(index).map(article=>article.key));break}
   let stage:"note"|"save"="note";
@@ -127,7 +127,8 @@ async function refreshProfile(profile:any,hardDeadline:number,selectedKeys:strin
     inserted+=Number(result.newNotifications||0);changed+=Number(result.changed||0);unchanged+=Number(result.unchanged||0);
     for(const row of batch)if(row.occurred_at&&(!latest||row.occurred_at>latest))latest=row.occurred_at;
    }
-   const {error}=await db.from("insight_public_articles").update({comment_count:art.commentCount,last_seen_at:new Date().toISOString()}).eq("member_id",dataMember).eq("article_key",art.key);if(error)throw error;
+   // Store confirmed article checkpoints in one RPC rather than one PATCH per article.
+   checkedArticles.push(art);
    scanned++;
   }catch(error){
    if(quotaError(error))throw error;
@@ -136,6 +137,22 @@ async function refreshProfile(profile:any,hardDeadline:number,selectedKeys:strin
    if(Date.now()>=hardDeadline||code==="COMMENT_REFRESH_DEADLINE"){truncated=true;pendingArticleKeys.push(...articles.slice(index+1).map(article=>article.key));break}
   }
   await sleep(40);
+ }
+ for(let start=0;start<checkedArticles.length;start+=300){
+  const batch=checkedArticles.slice(start,start+300);
+  try{
+   const updated=await rpcValue(db,"insight_comment_mark_articles_checked",{
+    p_member:dataMember,
+    p_articles:batch.map(a=>({article_key:a.key,comment_count:a.commentCount}))
+   });
+   if(Number(updated)!==batch.length)throw new Error("COMMENT_CHECKPOINT_MISMATCH");
+  }catch(error){
+   // The comment batch itself was already saved; only the article checkpoint
+   // needs retry. Do not claim the scan was fully confirmed.
+   for(const art of batch)articleFailures.push({articleKey:art.key,title:art.title,url:art.url,stage:"save",code:"COMMENT_CHECKPOINT_SAVE_FAILED",retryable:true});
+   errors.push("COMMENT_CHECKPOINT_SAVE_FAILED");
+   scanned-=batch.length;
+  }
  }
  const failed=articleFailures.length,partial=failed>0||truncated;
  return{ok:failed===0,noteId,dataMember,articles:scanned,failedArticles:failed,errors:[...new Set(errors)],articleFailures,pendingArticleKeys,missingCandidates:missing.length,newNotifications:inserted,changedComments:changed,unchangedComments:unchanged,latestCommentAt:latest,truncated,partial,...(partial?{retryAfterSeconds:Math.max(0,Math.ceil((60000-(Date.now()-started))/1000),Math.ceil(retryAfterMs/1000))}:{}),elapsedMs:Date.now()-started};
