@@ -77,7 +77,7 @@ jobs:
       - name: Check entry motion and retained notification behavior
         run: node --test tests/pc-display-mode.test.mjs tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/manual-login-navigation.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs tests/notification-filter-pagination-v423.test.mjs tests/notification-filter-pagination-v425.test.mjs tests/notification-controls-scope-budget-v1.test.mjs
       - name: Check applicant approval and owner notification scope
-        run: node --test tests/application-approval.test.mjs
+        run: node --test tests/application-approval.test.mjs tests/insight-withdrawal-retention.test.mjs
       - name: Check owner reads, authorization failures and detail request ordering
         run: node --experimental-vm-modules --test tests/owner-route-loading.test.mjs
       - name: Check stable DM status and row-scoped filters

@@ -1,0 +1,26 @@
+name: INSIGHT withdrawal retention PR check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/insight-access/index.ts'
+      - 'tests/insight-withdrawal-retention.test.mjs'
+      - '.github/workflows/retention-pr-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  withdrawal-retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --test tests/insight-withdrawal-retention.test.mjs tests/application-approval.test.mjs
+      - run: npm run build
