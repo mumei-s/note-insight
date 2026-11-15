@@ -8,7 +8,7 @@ import {PGlite} from '@electric-sql/pglite';
 
 const source=fs.readFileSync('supabase/functions/insight-comment-refresh/index.ts','utf8');
 const shared=fs.readFileSync('supabase/functions/_shared/egress-20260930.ts','utf8');
-function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,updateError=false,session=true,missingPool=[],articles=[],noteFetch=null,clock=null,onSave=null,catalogComments=1}={}){
+function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,updateError=false,session=true,missingPool=[],articles=[],noteFetch=null,clock=null,onSave=null,catalogComments=1,notificationCandidates=[]}={}){
  const calls=[],saved=[],notes=[],queries=[];let handler;
  const db={rpc:async(name,args)=>{
   calls.push({name,args});
@@ -17,6 +17,7 @@ function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveEr
   if(name==='insight_egress_authorize')return{data:{authorized:true,maintenance}};
   if(name==='insight_fast_comment_threads')return{data:[]};
   if(name==='insight_missing_comment_articles')return{data:missingPool};
+  if(name==='insight_comment_notification_backfill_candidates')return{data:notificationCandidates};
   if(name==='insight_comment_mark_articles_checked'){
    assert.equal(args.p_member,member);
    assert.ok(Array.isArray(args.p_articles)&&args.p_articles.length<=300);
@@ -63,6 +64,16 @@ test('ownerのapplication UUIDを通知FKへ流さず、正本ownerへ保存す�
  assert.equal(p.ok,true);assert.equal(p.changedComments,1);assert.equal(h.saved[0].member_id,'owner');assert.equal(h.saved[0].body,'取得本文');
  assert.equal(h.calls.find(x=>x.name==='insight_comment_refresh_claim').args.p_member,'owner');
  assert.ok(h.notes[0].includes('disabled_pinned=true'),'固定記事で最新記事が取得候補から落ちない');
+});
+test('古い記事の未保存コメント通知を最新記事より先に取得し、履歴へ反映する',async()=>{
+ const key='na663378740e1',h=edge({notificationCandidates:[{article_key:key,title:'古い記事',url:'https://note.com/ss_yr/n/'+key,publish_at:'2026-09-01',comment_count:36}]});
+ const result=await(await h.handler(memberRequest())).json();
+ assert.equal(result.ok,true);
+ assert.equal(result.articles,2);
+ assert.equal(h.saved[0].article_key,key);
+ assert.equal(h.saved[1].article_key,'n123');
+ assert.ok(h.notes.some(url=>url.includes('/notes/'+key+'/note_comments?')));
+ assert.equal(h.calls.find(x=>x.name==='insight_comment_notification_backfill_candidates').args.p_member,'owner');
 });
 test('最新記事のコメント数が0と報告されても、初めて付いたコメントを取得・保存する',async()=>{
  const h=edge({catalogComments:0}),p=await(await h.handler(memberRequest())).json();
