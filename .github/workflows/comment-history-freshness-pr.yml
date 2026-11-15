@@ -1,0 +1,27 @@
+name: INSIGHT comment history cache freshness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/member-insight-comments-final.tsx'
+      - 'tests/comment-history-stale-recheck.test.mjs'
+      - '.github/workflows/comment-history-freshness-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stale-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/comment-history-stale-recheck.test.mjs
+      - run: node --experimental-vm-modules --test tests/comments-loaded-retention.test.mjs tests/view-retention-lifecycle.test.mjs
+      - run: npm run build
