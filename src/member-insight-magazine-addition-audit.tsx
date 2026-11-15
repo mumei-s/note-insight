@@ -86,21 +86,23 @@ export function MemberInsightMagazineAdditionAudit({ magazineKey, selectedDay }:
       if (current.current === controller) { current.current = null; setBusy(false); }
     }
   }
-  return <details className="mimag-audit">
-    <summary>追加した日を確認する <small>🔔通知記録</small></summary>
+  useEffect(() => { void check(); }, [magazineKey, day]);
+  const latestEvent=events[0];
+  return <section className="mimag-audit" aria-label="マガジン追加の通知時刻">
+    <div className="mimag-audit-head"><b>追加通知の日時</b><small>{busy?"時刻を確認中…":latestEvent?"最新 "+jstTime(latestEvent.occurred_at || latestEvent.captured_at):checkedDay?"該当通知なし":"保存履歴を照合"}</small></div>
     <div className="mimag-audit-body">
-      <p>記事の「投稿日」と、マガジンへの「追加通知日」は別です。追加日を指定して、通知に記録された操作を照合します。</p>
+      <p>記事の投稿日とは別に、noteの🔔通知が発生した日時を表示します。個別記事の追加確定時刻とは区別してください。</p>
       <div className="mimag-audit-controls">
         <label>追加通知日 <input type="date" value={day} onChange={e => { setDay(e.target.value); setCheckedDay(""); }} /></label>
-        <button type="button" disabled={busy} onClick={() => void check()}>{busy ? "照合中…" : "通知を照合"}</button>
+        <button type="button" disabled={busy} onClick={() => void check()}>{busy ? "照合中…" : "再照合"}</button>
         {busy ? <button type="button" onClick={() => current.current?.abort()}>中止</button> : null}
       </div>
       {error ? <p role="alert" className="mimag-audit-error">{error}</p> : null}
       {checkedDay ? <>
-        <strong className="mimag-audit-count">{checkedDay.replaceAll("-", "/")} の追加通知：{events.length}件{partial ? "（一部のみ）" : ""}</strong>
+        <strong className="mimag-audit-count">{checkedDay.replaceAll("-", "/")} の追加通知：{events.length}件{partial ? "（取得範囲内）" : ""}</strong>
         {events.length ? <ul>{events.map(r => <li key={noticeIdentity(r)}><time>{jstTime(r.occurred_at || r.captured_at)}</time><b>{String(r.actor_name || "投稿者不明")}</b><span>{String(r.raw_text || "追加通知")}</span>{r.target_url ? <a href={String(r.target_url)} target="_blank" rel="noreferrer">マガジン ↗</a> : null}</li>)}</ul> : <p>この日の該当マガジンの追加通知は、保存済み履歴内で確認できませんでした。</p>}
-        <p className="mimag-audit-warning">通知は複数人・複数記事を1件にまとめる場合があります。通知件数＝追加記事数ではありません。個別の記事IDと実際の追加時刻が確認できないものは、1日1件ルールの違反と断定しません。通知を取得できなかった期間も対象外です。</p>
+        <p className="mimag-audit-warning">表示時刻は追加を知らせた通知の発生時刻です。複数人・複数記事が1件にまとまるため、個別記事の追加時刻や1日1件ルール違反を確定するものではありません。取得できない期間は含まれません。</p>
       </> : null}
     </div>
-  </details>;
+  </section>;
 }
