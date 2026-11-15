@@ -17,6 +17,12 @@ function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveEr
   if(name==='insight_egress_authorize')return{data:{authorized:true,maintenance}};
   if(name==='insight_fast_comment_threads')return{data:[]};
   if(name==='insight_missing_comment_articles')return{data:missingPool};
+  if(name==='insight_comment_mark_articles_checked'){
+   assert.equal(args.p_member,member);
+   assert.ok(Array.isArray(args.p_articles)&&args.p_articles.length<=300);
+   if(updateError)return{error:{message:'ARTICLE_UPDATE_FAILED'}};
+   return{data:args.p_articles.length};
+  }
   if(name==='insight_comment_refresh_batch'){
    assert.equal(args.p_member,member);
    for(const event of args.p_notifications)assert.equal(event.member_id,member,'通知は実在する正本profileを参照');
@@ -241,8 +247,18 @@ test('返信ページが取得できない記事は親だけを全件取得成�
 
 for(const update of [false,true])test(`${update?'記事情報更新':'保存RPC'}失敗はsave段階で返し、保存を自動で繰り返さない`,async()=>{
  const h=edge({saveError:!update,updateError:update}),p=await(await h.handler(memberRequest())).json();
- assert.equal(p.ok,false);assert.equal(p.failedArticles,1);assert.equal(p.articleFailures[0].stage,'save');assert.equal(p.articleFailures[0].code,'COMMENT_SAVE_FAILED');assert.equal(p.articleFailures[0].retryable,true);
+ assert.equal(p.ok,false);assert.equal(p.failedArticles,1);assert.equal(p.articleFailures[0].stage,'save');assert.equal(p.articleFailures[0].code,update?'COMMENT_CHECKPOINT_SAVE_FAILED':'COMMENT_SAVE_FAILED');assert.equal(p.articleFailures[0].retryable,true);
  assert.equal(h.calls.filter(call=>call.name==='insight_comment_refresh_batch').length,1);assert.equal(h.saved.length,update?1:0);
+});
+
+test('保存済み3記事の確認時刻を1 RPCにまとめ、記事ごとのPATCHをしない',async()=>{
+ const h=edge({articles:['nabc','nabd','nabe'].map(key=>storedArticle(key))});
+ const result=await(await h.handler(memberRequest({articleKeys:['nabc','nabd','nabe']}))).json();
+ assert.equal(result.ok,true);assert.equal(result.articles,3);
+ const marks=h.calls.filter(call=>call.name==='insight_comment_mark_articles_checked');
+ assert.equal(marks.length,1);
+ assert.deepEqual([...marks[0].args.p_articles.map(row=>row.article_key)].sort(),['nabc','nabd','nabe']);
+ assert.ok(!h.queries.some(query=>query.table==='insight_public_articles'&&query.operation==='update'));
 });
 
 test('deadline前に取得した記事は保存し、未着手の選択記事はpendingキーとして残す',async()=>{
