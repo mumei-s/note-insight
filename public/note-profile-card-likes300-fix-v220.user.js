@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.56
+// @version      2.9.57
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,13 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.56')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.56';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.57')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.57';
+function parseLiker(item,mediaUrl){
+ const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
+ if(!id||!urlname)return null;
+ return{likerKey:id,urlname,creator:String(u.nickname||u.name||urlname).trim(),actorUrl:'https://note.com/'+urlname,actorImageUrl:mediaUrl(u.user_profile_image_url||u.profileImageUrl||u.profile_image_url||u.user_profile_image_path||u.profile_image_path||u.profileImagePath||u.icon_url||u.image_url||'')}
+}
 const THUMBNAIL_WIDTH=860,STANDARD_THUMBNAIL_HEIGHT=220,MEDIUM_THUMBNAIL_HEIGHT=360,LEGACY_THUMBNAIL_HEIGHT=140;
 const MEDIUM_ARTICLE_FRAME=[20,65,410,230];
 function renderArticleArtwork(canvas,bitmap,[left,top,width,height]){
@@ -855,7 +860,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.56';
+const VERSION='2.9.57';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1479,11 +1484,6 @@ async function createNativeCard(view,row,insertPos){
  }
 }
 
-function parseLiker(item){
- const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
- if(!id||!urlname)return null;
- return{likerKey:id,urlname,creator:String(u.nickname||u.name||urlname).trim(),actorUrl:'https://note.com/'+urlname,actorImageUrl:mediaUrl(u.user_profile_image_url||u.profileImageUrl||u.profile_image_url||u.user_profile_image_path||u.profile_image_path||u.profileImagePath||u.icon_url||u.image_url||'')}
-}
 function contentList(p){const d=p?.data&&typeof p.data==='object'?p.data:{};return Array.isArray(d.contents)?d.contents:Array.isArray(d.notes)?d.notes:[]}
 function articleFromRaw(raw,creator={}){
  const note=raw?.note&&typeof raw.note==='object'?raw.note:raw;if(!note||typeof note!=='object')return null;
@@ -1822,7 +1822,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
    for(let page=1;page<=200&&out.length<limit;page++){
     if(stopRequested)throw new Error('停止しました');status('記事のスキ');
     const payload=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(key)+'/likes?page='+page+'&per=50'),list=Array.isArray(payload?.data?.likes)?payload.data.likes:[];
-    await acceptLikers(list.map(parseLiker).filter(Boolean),source);if(list.length<50)break;
+    await acceptLikers(list.map(item=>parseLiker(item,mediaUrl)).filter(Boolean),source);if(list.length<50)break;
    }continue;
   }
   if(source.type==='mag'){
@@ -4979,7 +4979,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.56';
+const VERSION='2.9.57';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
@@ -5213,16 +5213,16 @@ function selectedHistoryFilter(){
  const panel=document.getElementById(PANEL),period=panel?.querySelector('[data-history-period]')?.value;
  if(!period)return null;
  let fromDate='',toDate='',articleKey='';
+ if(panel.querySelector('[data-history-articles]')?.value==='selected'){
+  const input=String(panel.querySelector('[data-history-article]')?.value||'').trim();
+  articleKey=input.match(/^n[a-f0-9]{12}$/i)?.[0]?.toLowerCase()||summaryIdentity(input).key||'';
+  if(!articleKey)throw new Error('スキを受け取った記事のURLを入力してください');
+ }
  if(period==='today')fromDate=toDate=historyToday();
  else if(period==='date'||period==='range'){
   fromDate=String(panel.querySelector('[data-history-from]')?.value||'');
   toDate=period==='range'?String(panel.querySelector('[data-history-to]')?.value||''):fromDate;
-  if(!validHistoryDate(fromDate)||!validHistoryDate(toDate)||fromDate>toDate)throw new Error('スキされた日付を正しく指定してください');
- }
- if(panel.querySelector('[data-history-articles]')?.value==='selected'){
-  const input=String(panel.querySelector('[data-history-article]')?.value||'').trim();
-  articleKey=input.match(/^n[a-f0-9]{12}$/i)?.[0]?.toLowerCase()||input.match(/^https:\/\/(?:www\.)?note\.com\/[^/?#]+\/n\/(n[a-f0-9]{12})(?:[/?#]|$)/i)?.[1]?.toLowerCase()||'';
-  if(!articleKey)throw new Error('スキを受け取った自分の記事URLを指定してください');
+  if((!articleKey||fromDate||toDate)&&(!validHistoryDate(fromDate)||!validHistoryDate(toDate)||fromDate>toDate))throw new Error('スキされた日付を正しく指定してください');
  }
  return fromDate||articleKey?{fromDate,toDate,articleKey,timezone:'Asia/Tokyo'}:null;
 }
@@ -5238,13 +5238,18 @@ function patchHistoryFilterPanel(panel,detail){
  if(controls)return;
  controls=document.createElement('div');controls.dataset.historyFilter='';
  controls.style.cssText='display:grid;gap:6px;margin:8px 0;padding:8px;border:1px solid #355064;border-radius:9px';
- controls.innerHTML='<label>スキされた日（日本時間）<select data-history-period style="width:100%;min-width:0"><option value="today">今日</option><option value="date">指定日</option><option value="range">期間指定</option><option value="all">全期間・直近順</option></select></label><div data-history-dates hidden><div style="display:flex;gap:6px"><label style="min-width:0;flex:1">日付<input data-history-from type="date" style="width:100%;min-width:0;box-sizing:border-box"></label><label data-history-until hidden style="min-width:0;flex:1">終了日<input data-history-to type="date" style="width:100%;min-width:0;box-sizing:border-box"></label></div></div><label>スキを受け取った記事<select data-history-articles style="width:100%;min-width:0"><option value="all">全記事（過去の記事を含む）</option><option value="selected">記事を指定</option></select></label><label data-history-article-field hidden>自分の記事URL<input data-history-article type="url" placeholder="https://note.com/…/n/…" style="width:100%;min-width:0;box-sizing:border-box"></label><small>日付・記事の指定時は該当全員。人物の重複はまとめます。</small><button type="button" data-a="history-today">今日・全記事に設定</button>';
+ controls.innerHTML=`
+  <label>スキを受け取った記事<select data-history-articles style="width:100%;min-width:0"><option value="all">全記事（過去の記事を含む）</option><option value="selected">記事を指定</option></select></label>
+  <label data-history-article-field hidden>記事URL<input data-history-article type="url" placeholder="https://note.com/…/n/…" style="width:100%;min-width:0;box-sizing:border-box"></label>
+  <label>スキされた日（日本時間）<select data-history-period style="width:100%;min-width:0"><option value="all">指定なし（全期間）</option><option value="today">今日</option><option value="date">指定日</option><option value="range">期間指定</option></select></label>
+  <div data-history-dates hidden><div style="display:flex;gap:6px"><label style="min-width:0;flex:1">日付<input data-history-from type="date" style="width:100%;min-width:0;box-sizing:border-box"></label><label data-history-until hidden style="min-width:0;flex:1">終了日<input data-history-to type="date" style="width:100%;min-width:0;box-sizing:border-box"></label></div></div>
+  <button type="button" data-a="history-today">今日・全記事に設定</button>`;
  (detail.querySelector('.special-actions')||detail.lastElementChild)?.before(controls);
  let saved={};try{saved=JSON.parse(localStorage.getItem(HISTORY_FILTER_PREF)||'{}')||{}}catch{}
  const field=name=>controls.querySelector('[data-history-'+name+']');
  field('period').value=['today','date','range','all'].includes(saved.period)?saved.period:'all';
- field('from').value=validHistoryDate(saved.fromDate||'')?saved.fromDate:historyToday();
- field('to').value=validHistoryDate(saved.toDate||'')?saved.toDate:historyToday();
+ field('from').value=saved.fromDate===''||validHistoryDate(saved.fromDate||'')?saved.fromDate:historyToday();
+ field('to').value=saved.toDate===''||validHistoryDate(saved.toDate||'')?saved.toDate:historyToday();
  field('articles').value=saved.articles==='selected'?'selected':'all';field('article').value=String(saved.article||'');
  const update=()=>{
   const period=field('period').value,selected=field('articles').value==='selected';
@@ -5252,6 +5257,9 @@ function patchHistoryFilterPanel(panel,detail){
   controls.querySelector('[data-history-until]').hidden=period!=='range';controls.querySelector('[data-history-article-field]').hidden=!selected;
  };
  const save=()=>{update();try{localStorage.setItem(HISTORY_FILTER_PREF,JSON.stringify({period:field('period').value,fromDate:field('from').value,toDate:field('to').value,articles:field('articles').value,article:field('article').value}))}catch{}};
+ field('articles').addEventListener('change',()=>{
+  if(field('articles').value==='selected')field('period').value='all';
+ });
  controls.addEventListener('change',save);controls.addEventListener('input',save);
  bindPanelAction(controls.querySelector('[data-a="history-today"]'),'click:today',event=>{event.preventDefault();field('period').value='today';field('articles').value='all';save();setStatus('今日（日本時間）・全記事に設定しました｜「履歴から開始」で取得')});
  update();
@@ -5262,23 +5270,74 @@ function historyOptions(run=null){
   // Old quota-fragment backups did not store a count; their original plan
   // was 300 people. The new UI default must not reinterpret those backups.
   const count=Number(run.historyRequestedCount)||(Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.count)||300);
-  return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count,historyFilter:run.historyFilter||null};
+  return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count,historyFilter:run.historyFilter||null,articleLikesDirect:run.articleLikesDirect===true};
  }
  const panel=document.getElementById(PANEL),mode=panel?.querySelector('[data-mode]')?.value==='all'?'all':'number';
  const count=Number(panel?.querySelector('[data-count]')?.value||200);
  if(mode==='number'&&(!Number.isInteger(count)||count<1||count>HISTORY_CANDIDATE_CAP))throw new Error('スキ履歴の件数は1〜'+HISTORY_CANDIDATE_CAP+'人で指定してください');
- return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count,historyFilter:selectedHistoryFilter()};
+ const historyFilter=selectedHistoryFilter();
+ const articleLikesDirect=Boolean(historyFilter?.articleKey&&!historyFilter.fromDate&&!historyFilter.toDate);
+ return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count,historyFilter,articleLikesDirect};
 }
 function sameHistorySelection(run,options){
  if(!run?.likesHistoryFix230)return false;
  const prior=historyOptions(run);
- return prior.mode===options.mode&&(options.mode==='all'||prior.count===options.count)&&sameHistoryFilter(prior.historyFilter,options.historyFilter);
+ return prior.mode===options.mode&&(options.mode==='all'||prior.count===options.count)&&prior.articleLikesDirect===Boolean(options.articleLikesDirect)&&sameHistoryFilter(prior.historyFilter,options.historyFilter);
 }
 function checkpointHistoryOptions(saved){
+ const article=saved?.articleLikes;
+ if(article){
+  const {mode,count,historyFilter}=article;
+  return{mode,count,target:mode==='all'?Infinity:count,historyFilter,articleLikesDirect:true,resumeArticleLikes:true};
+ }
  if(saved?.historyFilter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:saved.historyFilter};
  const token=String(saved?.signature||'').match(/\|(all|\d+)\|(?:eligible-v251|exact-v250)$/)?.[1];
  if(token)return{mode:token==='all'?'all':'number',count:token==='all'?HISTORY_CANDIDATE_CAP:Number(token),target:token==='all'?Infinity:Number(token)};
  return historyOptions();
+}
+async function collectArticleLikers(requested){
+ const {articleKey}=requested.historyFilter,people=[],pages=new Set();
+ for(let pageNumber=1;pageNumber<=200;pageNumber++){
+  if(stopRequested)throw new Error('停止しました');
+  checkPause();
+  const payload=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(articleKey)+'/likes?page='+pageNumber+'&per=50');
+  const data=payload?.data,likes=data?.likes;
+  if(!Array.isArray(likes))throw new Error('指定記事のスキ一覧を確認できません');
+  if(likes.length){
+   const signature=JSON.stringify(likes.map(like=>[like?.user?.key??like?.user?.id??like?.user?.urlname,like?.created_at??like?.createdAt]));
+   if(pages.has(signature))throw new Error('記事のスキ一覧の次ページを取得できません');
+   pages.add(signature);
+   for(const like of likes){
+    const person=parseLiker(like,mediaUrl);
+    if(person)people.push({...person,likedArticleKey:articleKey,likedAt:String(like.created_at||like.createdAt||'')});
+   }
+  }
+  const unique=uniquePeople(people);
+  setStatus('記事のスキ一覧｜'+unique.length+'人を確認');
+  if(unique.length>HISTORY_CANDIDATE_CAP&&requested.mode==='all')throw new Error('記事のスキが'+HISTORY_CANDIDATE_CAP+'人を超えています。件数を指定してください');
+  if(!likes.length||payload.is_last_page===true||payload.isLastPage===true||data.is_last_page===true||data.isLastPage===true||requested.mode==='number'&&unique.length>=HISTORY_CANDIDATE_CAP)return unique.slice(0,HISTORY_CANDIDATE_CAP);
+ }
+ throw new Error('記事のスキ一覧の最終ページを確認できません');
+}
+async function prepareArticleLikers(requested){
+ const {mode,count,historyFilter}=requested;
+ const previous=readPrep()?.articleLikes;
+ if(requested.resumeArticleLikes&&previous?.people?.length&&sameHistoryFilter(previous.historyFilter,historyFilter))return;
+ const draftKey=editorArticleKey(),selection={mode,count,historyFilter,at:Date.now(),people:null};
+ writePrep({articleLikes:selection});
+ await flushPrepBackup();
+ const people=await collectArticleLikers(requested);
+ if(stopRequested)throw new Error('停止しました');
+ checkPause();
+ if(editorArticleKey()!==draftKey)throw new Error('編集中の記事が変わりました。貼り付け先の記事で実行してください');
+ if(!people.length)throw new Error('指定記事に、表示できるスキのクリエイターがいません');
+ writePrep({articleLikes:{...selection,people}});
+ await flushPrepBackup();
+}
+async function historyBridge(selection){
+ if(!selection?.articleLikesDirect)return Promise.resolve(GM_getValue(BRIDGE_KEY,null));
+ const article=readPrep()?.articleLikes;
+ return article&&sameHistoryFilter(article.historyFilter,selection.historyFilter)?article:null;
 }
 function historyExportCount(options){return options.historyFilter||options.mode==='all'?HISTORY_CANDIDATE_CAP:Math.min(HISTORY_CANDIDATE_CAP,Math.max(options.count+20,options.count*3));}
 function prepareLikesHistoryExport(options=historyOptions()){
@@ -5310,6 +5369,7 @@ function startFixed300(options=historyOptions()){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
  const run=readRun();
  if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length>1)return createFixed300();
+ if(options.articleLikesDirect)return createFixed300(options);
  return prepareLikesHistoryExport(options).then(()=>createFixed300(options)).catch(error=>setStatus('取得停止：'+(error?.message||String(error)),true));
 }
 function mediaUrl(value){
@@ -5759,8 +5819,8 @@ function completedImagePrefix(rows,images){
  }
  return images.length
 }
-async function buildRows(target=300){
- const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
+async function buildRows(target=300,selection=null){
+ const bridge=await historyBridge(selection);
  const people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
  if(!people.length)throw new Error('スキ履歴の取得データがありません。「① 最初から」で取得してください');
  const targetKey=target===Infinity?'all':target;
@@ -5800,7 +5860,7 @@ async function buildRows(target=300){
   }
   if(uniquePeople([...rows,...prepared,...skipped,...rejected]).length!==rows.length+prepared.length+skipped.length+rejected.length)throw new Error('クリエイターの重複を検出しました。スキ履歴を取得し直してください');
   rows.push(...prepared);skipped.push(...rejected);index+=batch.length;
-  writePrep({signature,index,rows,skipped,historyFilter:bridge.historyFilter||null,presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content}:null,updatedAt:Date.now()});await flushPrepBackup();
+  writePrep({signature,index,rows,skipped,historyFilter:bridge.historyFilter||null,...(selection?.articleLikesDirect?{articleLikes:bridge}:{}),presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content}:null,updatedAt:Date.now()});await flushPrepBackup();
  }
  if(target!==Infinity&&rows.length<target)setStatus('取得できた'+rows.length+'人で続行｜プロフィールなし・取得不可 '+skipped.length+'人をスキップ');
  if(!rows.length)throw new Error('貼り付け可能なクリエイターがありません。プロフィールなし・公開記事なし等を除外しました');
@@ -5817,7 +5877,7 @@ async function replaceUnavailableCreator(rows,index,error,mode='number'){
  const count=rows.length-1,target=mode==='all'?Infinity:count;
  if(stopRequested||/停止しました|手動停止/.test(String(error?.message||error)))throw error||new Error('停止しました');
  if(!Number.isInteger(index)||index<0||index>=count)throw new Error('最後の実績の算数は除外できません。画像の取得を再試行してください');
- const failed=rows[index],bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null)),people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
+ const failed=rows[index],selection=readRun(),bridge=await historyBridge(selection),people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
  if(!people.length)throw new Error('追加候補の保存データがありません。現在の貼り付けは保持しました');
  const targetKey=target===Infinity?'all':target;
  const signature=String(bridge?.at||0)+'|'+targetKey+'|eligible-v251',previousSignature=String(bridge?.at||0)+'|'+targetKey+'|exact-v250';
@@ -5848,7 +5908,7 @@ async function replaceUnavailableCreator(rows,index,error,mode='number'){
  selected=selected.filter(person=>!sameCreator(person,failed));
  if(!skipped.some(person=>sameCreator(person,failed)))skipped.push({urlname:canonicalUrlname(failed),likerKey:creatorKey(failed),reason:String(error?.message||error||'画像取得不可')});
  writePrep({...checkpoint,signature,index:scanned,rows:selected,skipped,updatedAt:Date.now()});await flushPrepBackup();
- const filled=await buildRows(target);
+ const filled=await buildRows(target,selection);
  if(rows.slice(0,index).some((row,position)=>!sameCreator(row,filled[position])))throw new Error('貼り付け済みの順序を維持できません。現在の貼り付けは保持しました');
  const refreshed=filled.map((person,position)=>{if(position<index)return rows[position];const previous=rows.slice(0,count).find(row=>sameCreator(row,person));return previous?{...person,...previous,index:position+1}:{...person,index:position+1}});
  refreshed.push({...rows[count],index:filled.length+1});
@@ -5908,7 +5968,7 @@ async function recoverCompatibleRun(view,existing){
    try{rows=verify(validateFixedRows([...checkpoint.rows.map((row,position)=>({...row,index:position+1})),{...final,index:checkpoint.rows.length+1}]))}catch{}
   }
  }
- if(!rows){const creators=await buildRows(target);rows=verify(validateFixedRows([...creators,await enrichFinal(creators.length+1)]))}
+ if(!rows){const creators=await buildRows(target,options);rows=verify(validateFixedRows([...creators,await enrichFinal(creators.length+1)]))}
  for(let position=0;position<rows.length;position++){
   const row=rows[position],before=rows[position-1]?.designIndex;
   if(position<owned.length&&(Array.isArray(existing.rows)?existing.rows:[]).some(person=>sameCreator(person,row)&&norm(person.url)===norm(row.url)&&person.designIndex===row.designIndex)&&Number.isSafeInteger(row.designIndex)&&row.designIndex>=0)continue;
@@ -6880,7 +6940,7 @@ async function restartFixed300(){
   if(run?.purchasedReview)throw new Error('購入記事紹介の作成中です。「購入記事紹介」の再開を使ってください');
   if(run?.awaitingInsertion){
    if(sameHistorySelection(run,options))return createFixed300();
-   await prepareLikesHistoryExport(options);
+   if(!options.articleLikesDirect)await prepareLikesHistoryExport(options);
    return createFixed300(options);
   }
   if(run?.rows?.length){
@@ -6902,9 +6962,10 @@ async function resumeFixed300(){
   if(!run?.gallery126&&run?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
   if(run?.items?.length||run?.rows?.length)return createFixed300();
    if(page.__MUMEI_PROFILE_CARD_RESUME_MIXED_TAGS__?.())return;
-  const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
-  if(!Array.isArray(bridge?.people)||!bridge.people.length){setStatus('読み込みの続きがありません。「① 最初から」でスキ履歴を取得してください',true);return;}
-  let saved;saved=readPrep()
+  const saved=readPrep();
+  if(saved?.articleLikes)return createFixed300(checkpointHistoryOptions(saved));
+  const bridge=await historyBridge();
+  if(!Array.isArray(bridge?.people)||!bridge.people.length){setStatus('読み込みの続きがありません。「履歴から開始」でスキ履歴を取得してください',true);return;}
   setStatus('読み込みの続きから｜確認済み '+(saved?.rows?.length||0)+'人｜取得できない人は飛ばします');
   return createFixed300(bridge.historyFilter?{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:bridge.historyFilter}:checkpointHistoryOptions(saved));
  }catch(error){setStatus('読み込み再開停止：'+(error?.message||String(error)),true);}
@@ -7343,7 +7404,9 @@ async function createFixed300(options=null){
   else if(gallery)rows=await buildGalleryRows({availableOnly});
   else if(existing?.likesHistoryFix230)rows=validateFixedRows(existing.rows);
   else{
-   const creators=await buildRows(requested.target);
+   if(requested.articleLikesDirect)await prepareArticleLikers(requested);
+   else if(readPrep()?.articleLikes){writePrep(null);await flushPrepBackup();}
+   const creators=await buildRows(requested.target,requested);
    const finalRow=await enrichFinal(creators.length+1);
    rows=validateFixedRows([...creators,finalRow])
   }
@@ -7371,7 +7434,7 @@ async function createFixed300(options=null){
     cardBaselineNodes:gallery?embedNodes(view).map(hit=>({key:cardKey(hit),src:String(hit.node.attrs?.src||''),json:hit.node.toJSON?.()||null})):[],
     imageBaselineRecords:imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})),
     createdAt:Date.now(),stage:'images_building',likesHistory:!gallery,likesHistoryFix230:!gallery,gallery126:gallery,galleryAvailableOnly:false,pendingPeople:[],...(gallery?{galleryProfileTexts:{}}:{}),
-    imageAnchorPos:gallery?initialAnchor:cardAnchorFromSelection(view),sources:gallery?galleryManifest().source:'スキ履歴（読み取りのみ）',mode:requested.mode,count:gallery?galleryCount:rows.length-1,historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,historyFilter:!gallery?requested.historyFilter||null:null,choice:gallery?'oldest':'latest'
+    imageAnchorPos:gallery?initialAnchor:cardAnchorFromSelection(view),sources:gallery?galleryManifest().source:'スキ履歴（読み取りのみ）',mode:requested.mode,count:gallery?galleryCount:rows.length-1,historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,historyFilter:!gallery?requested.historyFilter||null:null,articleLikesDirect:!gallery&&requested.articleLikesDirect===true,choice:gallery?'oldest':'latest'
    };
    writeRun(run)
   }else{
