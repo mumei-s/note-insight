@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.57
+// @version      2.9.58
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,8 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.57')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.57';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.58')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.58';
 function parseLiker(item,mediaUrl){
  const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
  if(!id||!urlname)return null;
@@ -860,7 +860,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.57';
+const VERSION='2.9.58';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -3462,7 +3462,13 @@ function nativeDraftSaveButton(allowDisabled=false){
  return matches.length===1?matches[0]:null;
 }
 function draftSaveNotices(){
- return [...document.querySelectorAll('[role="status"],[aria-live]')].filter(node=>node.getClientRects?.().length&&!node.closest?.('#'+PANEL+',[id^="mumei-"],.ProseMirror')).map(node=>String(node.textContent||'').trim()).filter(text=>text.length<100&&/(?:下書き|記事)?(?:を)?保存(?:しました|されました|済み)/.test(text));
+ const notices=new Map();
+ for(const node of document.querySelectorAll('[role="status"],[aria-live]')){
+  if(!node.getClientRects?.().length||node.closest?.('#'+PANEL+',[id^="mumei-"],.ProseMirror'))continue;
+  const text=String(node.textContent||'').trim();
+  if(/^(?:(?:下書き|記事|本文|変更内容)を?|下書きとして|一時)?保存(?:しました|されました|済み)[。！!]?$/.test(text))notices.set(node,text);
+ }
+ return notices;
 }
 async function saveOnce(label='貼り付け完了｜下書き保存を1回だけ実行中…'){
  const articleKey=editorArticleKey(),run=readRun();
@@ -3488,41 +3494,31 @@ async function saveNativeDraftOnce(label){
  setStatus(label);
  const articleKey=editorArticleKey();
  if(!articleKey)throw new Error('下書きの保存先を確認できません。本文は保持しています');
- const sameArticle=()=>{if(editorArticleKey()!==articleKey)throw new Error('保存中に記事画面が変わりました。保存操作は再送しません')};
- const beforeNotices=new Set(draftSaveNotices());
- let button=nativeDraftSaveButton(),savingSeen=false,idleTicks=0;
- // The editor's existing draft method saves in place. Do not create an API
- // or invoke a navigation control when this capability is unavailable.
+ const beforeNotices=draftSaveNotices(),deadline=Date.now()+15000;
+ let confirmed=false,failure=null;
+ const observe=result=>{
+  if(result===false||result?.result===false)failure=new Error('noteの下書き保存に失敗しました。本文は保持しています');
+  else if(result===true||result?.result===true)confirmed=true;
+ };
  if(typeof page.noteEditor?.registerNoteDraft==='function'){
   const result=page.noteEditor.registerNoteDraft('manual');
-  if(result===false||result?.result===false)throw new Error('noteの下書き保存を開始できません。本文は保持しています');
-  if(result&&typeof result.then==='function'){
-   let timer,saved;
-   try{saved=await Promise.race([result,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('下書き保存の確認が時間切れです。保存操作は再送しません'),{code:'DRAFT_SAVE_TIMEOUT'})),5000)})]);if(saved===false||saved?.result===false)throw new Error('noteの下書き保存に失敗しました。本文は保持しています')}
-   catch(error){if(error?.code!=='DRAFT_SAVE_TIMEOUT')throw error;sameArticle();setStatus('保存操作を実行しました｜保存完了は画面で確認してください');return{requested:true,confirmed:false}}
-   finally{clearTimeout(timer)}
-   sameArticle();
-   if(saved===true||saved?.result===true)return true;
-  }
-  else if(result===true||result?.result===true){sameArticle();return true}
+  if(result&&typeof result.then==='function')Promise.resolve(result).then(observe,error=>{failure=error||new Error('noteの下書き保存に失敗しました')});
+  else observe(result);
  }else{
+  const button=nativeDraftSaveButton();
   if(!button)throw new Error('noteの下書き保存ボタンを一意に確認できません。本文は保持しています');
   const originalType=button.getAttribute('type');
   try{button.setAttribute('type','button');button.click()}
   finally{if(originalType==null)button.removeAttribute('type');else button.setAttribute('type',originalType)}
  }
- // A completed request or an idle button can also follow a failed save.
- // Only a positive native result or a fresh saved notice confirms persistence.
- for(let tick=0;tick<50;tick++){
-  sameArticle();
-  if(button?.isConnected===false)button=nativeDraftSaveButton(true);
-  const text=String(button?.textContent||'').trim();
-  const saving=Boolean(button&&(button.disabled||button.getAttribute?.('aria-busy')==='true'||button.getAttribute?.('aria-disabled')==='true'||/保存中|保存しています/.test(text)));
-  if(saving){savingSeen=true;idleTicks=0}
-  else if(savingSeen)idleTicks++;
-  if(draftSaveNotices().some(text=>!beforeNotices.has(text)))return true;
-  if(!savingSeen&&tick>=3||savingSeen&&idleTicks>=3){setStatus('保存操作を実行しました｜保存完了は画面で確認してください');return{requested:true,confirmed:false}}
-  await sleep(100);
+ // A pending native call and a delayed toast can both outlast the button's
+ // disabled state. Observe the same save, without clicking a second time.
+ for(;;){
+  if(editorArticleKey()!==articleKey)throw new Error('保存中に記事画面が変わりました。保存操作は再送しません');
+  if(failure)throw failure;
+  if(confirmed||[...draftSaveNotices()].some(([node,text])=>beforeNotices.get(node)!==text))return true;
+  const remaining=deadline-Date.now();if(remaining<=0)break;
+  await sleep(Math.min(150,remaining));
  }
  setStatus('保存操作を実行しました｜保存完了は画面で確認してください');
  return{requested:true,confirmed:false};
@@ -4215,10 +4211,10 @@ async function saveCompletedCards(total,label){
   writeRun({...current,stage:'complete',draftSaveState:'confirmed',updatedAt:Date.now()});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   setStatus('完了 ✅ 画像一覧 '+run.rows.length+'件 → 通知カード '+total+'件');
- }else setStatus('通知カード '+total+'件は作成済み｜下書き保存は未確認。画面で確認し、②で保存確認を再実行できます');
+ }else setStatus('通知カード '+total+'件は貼付済み｜保存は未確認。「再開」で保存を確認できます');
  return saved;
 }
-async function createCardsAtTap(){
+async function createCardsAtTap({resume=false}={}){
  if(actionBlocked())return;busy=true;stopRequested=false;cardPauseRequested=false;cardRunActive=true;update();
  await keepAwake();
  try{
@@ -4252,7 +4248,7 @@ async function createCardsAtTap(){
 
   // With no completed/in-flight cards, a new tap starts at the current cursor.
   // Completed or uncertain conversions keep their saved position for recovery.
-  if(!done&&!run.pendingCard)run={...run,cardAnchorPos:tappedAnchor};
+  if(!done&&!run.pendingCard&&!resume)run={...run,cardAnchorPos:tappedAnchor};
 
   if(done>=rows.length){
    if(run.stage==='complete'&&run.draftSaveState==='confirmed'){
@@ -4979,7 +4975,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.57';
+const VERSION='2.9.58';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
@@ -5811,13 +5807,16 @@ function validateFixedRows(rows,expectedCount=null){
  if(creators.some(row=>sameCreator(row,final)))throw new Error('実績の算数が'+count+'人の一覧にも含まれています。「最初に戻る」で一覧を作り直してください');
  return rows
 }
-function completedImagePrefix(rows,images){
- const continuousRun=readRun();if(!continuousRun?.gallery126&&Array.isArray(continuousRun?.items)&&continuousRun.items.length)return completedContinuousCount(rows,continuousRun.items);
+function completedImagePrefix(rows,images,run=readRun()){
  if(images.length>rows.length)throw new Error('保存済み画像が一覧の件数を超えています。本文を確認してください');
  for(let index=0;index<images.length;index++){
-  if(!rows[index]?.url||norm(images[index]?.node?.attrs?.link)!==norm(rows[index].url))throw new Error('画像の不足・順序の変更を検出しました。'+(index+1)+'人目から本文を確認し、「① 最初から」で作り直してください');
+  if(!rows[index]?.url||norm(images[index]?.node?.attrs?.link)!==norm(rows[index].url))throw new Error('画像の不足・順序の変更を検出しました。'+(index+1)+'人目の前後を本文で確認してください');
  }
- return images.length
+ if(!run?.gallery126&&run?.items?.length){
+  const recorded=completedContinuousCount(rows,run.items);
+  if(recorded!==images.length)throw new Error('本文の画像 '+images.length+'件と貼付記録 '+recorded+'件を照合できません。現在の本文は保持しました');
+ }
+ return images.length;
 }
 async function buildRows(target=300,selection=null){
  const bridge=await historyBridge(selection);
@@ -6030,7 +6029,8 @@ async function ensureCardsRunReady(view,anchors=null){
   }
   return readRun();
  }
- if(Array.isArray(run.rows)&&run.rows.length&&['images_ready','cards_building','complete'].includes(run.stage))return run;
+ const imagesReady=Array.isArray(run.rows)&&run.rows.length&&['images_ready','cards_building','complete'].includes(run.stage);
+ if(imagesReady&&!run.likesHistoryFix230)return run;
  const checkpoint=readPrep();
  const currentVersion=/^2\.[56]\.\d+(?:$|\b)/.test(String(run.version||''));
  const fragment=currentVersion&&!Array.isArray(run.rows)&&Array.isArray(checkpoint?.rows)&&checkpoint.rows.length>0;
@@ -6039,8 +6039,9 @@ async function ensureCardsRunReady(view,anchors=null){
  if(!run.likesHistoryFix230){run=await recoverCompatibleRun(view,run);}
  let rows;try{rows=validateFixedRows(run.rows)}catch{run=await recoverCompatibleRun(view,run);rows=validateFixedRows(run.rows)}
  const images=ownedImagesForRun(view,run);
- const count=completedImagePrefix(rows,images);
+ const count=completedImagePrefix(rows,images,run);
  if(count!==rows.length)throw new Error('本文の画像を照合しました：'+count+'/'+rows.length+'件。完成分は保持しています');
+ if(imagesReady&&rows===run.rows)return run;
  run={...run,rows,stage:'images_ready',imagesCompletedAt:run.imagesCompletedAt||Date.now(),updatedAt:Date.now()};
  writeRun(run);await flushRunBackup();return readRun()
 }
@@ -6932,6 +6933,13 @@ function addDivider(view,hit,row){
  const run=readRun();if(run)writeRun({...run,dividerUrls:[...new Set([...(run.dividerUrls||[]),row.url])]});
  return pos+node.nodeSize;
 }
+function hasCardProgress(run){
+ return Boolean(run?.rows?.length&&!run.awaitingInsertion&&!run.clearSavePending&&
+  (run.pauseStage==='cards'||run.stage==='cards_building'||run.stage==='complete'||run.pendingCard||run.cardKeys?.length||run.cardsCompletedAt));
+}
+function showHistoryImagesReady(count,confirmed){
+ setStatus('画像 '+count+'/'+count+'件｜本文で位置を選んで「② 通知カード」'+(confirmed?'':'｜保存は未確認'));
+}
 async function restartFixed300(){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
  try{
@@ -6944,7 +6952,8 @@ async function restartFixed300(){
    return createFixed300(options);
   }
   if(run?.rows?.length){
-   setStatus('貼り付け記録があります。「再開」か「今回分を全削除」を選んでください',true);
+   if(sameHistorySelection(run,options))return resumeFixed300();
+   setStatus('現在の貼り付けの続きは「再開」を押してください',true);
    return;
   }
   return startFixed300(options);
@@ -6957,7 +6966,8 @@ async function resumeFixed300(){
   const view=findView();if(view)await repairTrackedRawFormulas(view);
   const run=readRun();
   if(run?.purchasedReview){setStatus('この保存分は購入記事紹介の専用版で再開してください',true);return;}
-  if(run?.pauseStage==='cards'&&!(run.rows||[]).some(summaryNeedsRefresh)&&!galleryNeedsParticipantUpgrade(run)&&typeof page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__==='function')return page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__();
+  const resumeCards=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;
+  if(hasCardProgress(run)&&!run.rows.some(summaryNeedsRefresh)&&!galleryNeedsParticipantUpgrade(run)&&typeof resumeCards==='function')return resumeCards({resume:true});
   if(page.__MUMEI_PROFILE_CARD_RESUME_MAGAZINE_MEMBERS__?.())return;
   if(!run?.gallery126&&run?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
   if(run?.items?.length||run?.rows?.length)return createFixed300();
@@ -7425,6 +7435,17 @@ async function createFixed300(options=null){
   const galleryCount=gallery?rows.length-1:0;
 
   let run=readRun();
+  if(!gallery&&run?.likesHistoryFix230&&!run.awaitingInsertion){
+   const images=ownedImagesForRun(view,run);
+   if(completedImagePrefix(rows,images,run)===rows.length){
+    if(!hasCardProgress(run)&&run.stage!=='images_ready'){
+     writeRun({...run,stage:'images_ready',paused:false,pauseStage:null,imagesCompletedAt:run.imagesCompletedAt||Date.now(),updatedAt:Date.now()});
+     await flushRunBackup();
+    }
+    showHistoryImagesReady(rows.length,run.draftSaveState==='confirmed');
+    return;
+   }
+  }
   if(!run?.likesHistoryFix230&&!run?.gallery126){
    if(gallery&&view.state.doc!==initialDoc&&!view.state.doc.eq?.(initialDoc))throw new Error('読み込み中に本文が変更されました。本文位置を選んで「126人の続き」を押してください');
    run={
@@ -7566,11 +7587,12 @@ async function createFixed300(options=null){
 
   if(gallery){reconcileGalleryHeadings(view,readRun()||run,rows);assertGalleryPaste(view,rows)}
   run=readRun()||run;
+  if(!gallery&&completedImagePrefix(rows,ownedImagesForRun(view,run),run)!==rows.length)throw new Error('貼り付け済み画像を本文で確認できません。今ある画像は保持しました');
   writeRun({...run,stage:'images_ready',paused:false,pauseStage:null,rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   summarySyncCardAnchor(view);
   await flushRunBackup();
-   const saved=typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function'?await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__((gallery?'ハロウィン極薄'+galleryCount+'人・'+galleryCount+'種類＋実績1件':'極薄'+(rows.length-1)+'人＋実績1件')+'｜画像貼付完了。下書き保存中…'):{confirmed:false};
-   setStatus(saved?.confirmed===false?'画像 '+rows.length+'件は貼付済み｜下書き保存は未確認。note画面で保存完了を確認してください':'極薄'+rows.length+'件完了 ✅ '+(gallery&&availableOnly?'やとさん1人は記事公開待ち。':'')+'カードを置く本文位置をタップ→②カード続き/開始')
+  const saved=await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__?.('画像 '+rows.length+'/'+rows.length+'件｜下書き保存中…');
+  showHistoryImagesReady(rows.length,saved===true||saved?.confirmed===true);
  }catch(error){
   if(pendingAnchorMap){mapGalleryCardAnchorsAfterInsert(pendingAnchorMap);await flushRunBackup();}
   let pauseNotice='';
