@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.60
+// @version      2.9.61
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,8 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.60')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.60';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.61')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.61';
 function parseLiker(item,mediaUrl){
  const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
  if(!id||!urlname)return null;
@@ -860,7 +860,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.60';
+const VERSION='2.9.61';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1659,7 +1659,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
     return{row:null,reason:'掲載記事の投稿者・記事IDを確認できない',type:'scope-unavailable'};
    }
   }
-  const audit=articleSafetyCheck(row,note);
+  const audit=articleSafetyCheck(magazineArticles&&listed.has(row.key)?scoped:row,note);
   if(!audit.ok)return{row:null,reason:audit.reason,type:'scope-rejected'};
   // A source mismatch cannot disguise a known identity error or trigger a
   // replacement article. The existing per-person gate must hold this row.
@@ -2027,15 +2027,37 @@ function specialBlockedReason(text){
  for(const rule of SPECIAL_NG)if(rule.re.test(t))return rule.label;
  return''
 }
+// Exact, reviewed neutral uses for the one contest listing. No other scope,
+// author, phrase, or safety rule is exempt. Re-run the full NG matcher.
+const REVIEWED_CONTEST_MAGAZINE='ma1a87b1b24ca';
+const REVIEWED_CONTEST_KEYWORDS={
+ n0fe6abca2911:{account:'59ulu_ulu95',word:'競艇',tag:'競艇初心者'},
+ n99ffb606d1f8:{account:'idolmusic',word:'資産運用',body:['資産運用に使ってみたりとすっかり生活の一部']},
+ nb236e94a83e8:{account:'vast_lily4547',word:'競馬',body:['競馬好きの私達が読んでほしい記事マガジン','地方競馬特化AI','地方競馬に、もっと熱狂を。','競馬好きの私が、心に残った記事']},
+ n5c16e20c0af2:{account:'kind_echium202',word:'競馬',body:['この前、競馬の予想大会でGETした500P','めじゅさんは競馬も好きとのことで']}
+};
+function reviewedContestKeyword(row,note){
+ const request=row?.sourceScope,key=scopeArticleKey(row?.key),review=REVIEWED_CONTEST_KEYWORDS[key],author=note?.user||note?.author||{};
+ if(!review||row?.magazineListedArticle!==true||request?.kind!=='mag'||request.magazineKey!==REVIEWED_CONTEST_MAGAZINE||request.articleKey!==key||scopeArticleKey(note?.key)!==key||note?.is_draft===true||note?.is_published===false)return null;
+ const url=scopeUrlIdentity(row.url);
+ return url.key===key&&url.account===review.account&&scopeAccount(row.urlname)===review.account&&scopeAccount(author.urlname||author.urlName)===review.account&&!scopeIdentityMismatch(row,note)?review:null;
+}
 function articleSafetyCheck(row,note={}){
  if(row?.finalMarker||row?.profileOnly||norm(row?.url)===norm(FINAL_URL))return{ok:true,reason:''};
  if(!note||typeof note!=='object'||!String(note.key||note.note_key||note.noteKey||'').trim())return{ok:false,reason:'一般NG：記事詳細を確認できない'};
  // Source is the selected article, NOT the creator's full profile.
+ const reviewed=reviewedContestKeyword(row,note);
+ const tags=assignedTags(note)?.names||[];
+ let body=note?.body;
+ if(reviewed?.body&&typeof body==='string'){
+  body=body.slice(0,60000).replace(/<[^>]*>/g,' ').normalize('NFKC');
+  for(const exact of reviewed.body)body=body.replace(exact,exact.replace(reviewed.word,' '));
+ }
  const fields=[
   row?.title,note?.name,note?.title,note?.description,note?.lead,note?.excerpt,
-  note?.summary,note?.body,note?.body_html,note?.bodyText,note?.body_text,
+  note?.summary,body,note?.body_html,note?.bodyText,note?.body_text,
   note?.content,note?.free_body,note?.freeBody,
-  assignedTags(note)?.names?.join(' ')
+  tags.map(name=>reviewed?.tag===name?name.replace(reviewed.word,' '):name).join(' ')
  ];
  const combined=fields.filter(v=>typeof v==='string').map(v=>v.slice(0,60000)).join(' ').replace(/<[^>]*>/g,' ');
  const blocked=specialBlockedReason(combined);
@@ -3136,6 +3158,47 @@ function setSelectionForInsert(view,pos,exact=false){
 
 const CORE_DIVIDER_FALLBACK='────────────';
 let coreDividerAnchorWork=null;
+const coreProvenDividerNodes=new WeakMap(),coreProvenDividerKeys=new Set();
+function coreDividerRecordKey(record){return JSON.stringify([record.articleKey,record.runId,record.image?.id||'',record.image?.src||'',record.image?.url||''])}
+function coreDividerStableId(node,attr=null){
+ const attrs=node?.attrs||{};
+ const keys=attr?[attr]:['id','nodeId','node_id','blockId','block_id','noteId','note_id'];
+ for(const key of keys){
+  const value=attrs[key];
+  if(typeof value==='string'&&value.trim()||typeof value==='number'&&Number.isSafeInteger(value)&&value>0)return{attr:key,value:String(value)};
+ }
+ return null;
+}
+function coreOwnedDividerNodes(view,run,images){
+ const records=(run?.coreDividerRecords||[]).filter(record=>record?.version===1&&record.runId===run.createdAt&&record.articleKey===run.articleKey);
+ if(!records.length)return[];
+ const roots=[];
+ view.state.doc.forEach((node,pos)=>roots.push({node,pos}));
+ const hits=roots.filter(hit=>isCoreDivider(view,hit.node));
+ const owned=new Map();
+ for(const record of records){
+  const key=coreDividerRecordKey(record);
+  let matches=hits.filter(hit=>coreProvenDividerNodes.get(hit.node)===key);
+  if(!matches.length){
+   // On reload, use persisted node identity only when unique in this draft.
+   // Ordinary id-less dividers cannot be distinguished from hand-made lines
+   // after their linked image or proof has been lost.
+   const id=coreDividerStableId(record.node);
+   if(id){
+    matches=roots.filter(hit=>coreDividerStableId(hit.node,id.attr)?.value===id.value);
+    if(matches.length===1&&!legacyCoreDividerNodeMatches(view,matches[0].node,record.node))matches=[];
+    if(matches.length>1)continue;
+   }
+  }
+  if(matches.length===1){owned.set(matches[0].pos,matches[0]);continue;}
+  if(matches.length>1||coreProvenDividerKeys.has(key)||coreDividerStableId(record.node))continue;
+  const owners=images.filter(image=>sameCoreDividerImage(record.image,coreDividerImage(image)));
+  if(owners.length!==1)continue;
+  const image=owners[0],adjacent=ownedCoreDivider(view,image,run);
+  if(adjacent&&coreDividerRecordKey(adjacent.record)===key)owned.set(adjacent.pos,adjacent);
+ }
+ return [...owned.values()];
+}
 function coreDividerType(view){
  const nodes=view.state.schema.nodes;
  for(const name of ['horizontal_rule','horizontalRule','horizontal-rule','divider','separator','hr'])if(nodes[name])return nodes[name];
@@ -3309,6 +3372,8 @@ async function appendCoreDivider(view,row,hit,{node=null,work=null}={}){
   const changes={coreDividerFormat:1,pendingCoreDivider:null};let divider=null;
   if(proof){
    actual=proof.hit;const record=coreDividerRecord(row,actual,proof.node,current);
+   const ownership=coreDividerRecordKey(record);
+   coreProvenDividerNodes.set(proof.node,ownership);coreProvenDividerKeys.add(ownership);
    changes.coreDividerRecords=[...(current.coreDividerRecords||[]).filter(item=>!sameCoreDividerImage(item.image,identity)),record];
    changes.dividerUrls=[...new Set([...(current.dividerUrls||[]),row.url])];divider={node:proof.node,pos:proof.pos,record};
   }
@@ -3436,8 +3501,25 @@ async function reconcilePendingCoreImage(view){
  });
  if(orphans.length>1)throw new Error('アップロード中断後の画像を一意に確認できません。二重貼付防止のため本文を保持しました');
  if(orphans.length===1){
-  const hit=orphans[0],link=norm(hit.node.attrs?.link);
-  if(link&&link!==norm(row.url))throw new Error('中断画像のリンクが異なります。自動で貼り直しません');
+  const hit=orphans[0],rawLink=String(hit.node.attrs?.link??'').trim();
+  if(rawLink&&norm(rawLink)!==norm(row.url))throw new Error('中断画像のリンクが異なります。自動で貼り直しません');
+  if(!rawLink){
+   // Native uploads arrive unlinked. norm('') is the editor URL, not an
+   // article link. Recover only the single new image in the saved upload
+   // window, for the exact next entry; do not assume an empty link proves it.
+   const id=String(hit.node.attrs?.id||''),caption=String(hit.node.textContent||'').trim();
+   const oldIds=new Set([...(run.items||[]),...(run.imageBaselineRecords||[])].map(item=>String(item.id||'')).filter(Boolean));
+   const fresh=imageNodes(view).filter(candidate=>{
+    const candidateId=String(candidate.node.attrs?.id||'');
+    return candidateId&&!before.has(candidateId)&&!oldIds.has(candidateId)&&remoteImage(candidate.node);
+   });
+   if(!Array.isArray(pending.beforeIds)||!Number.isSafeInteger(from)||from<0||
+      run.rows[completedContinuousCount(run.rows,run.items)]!==row||oldIds.has(id)||
+      fresh.length!==1||fresh[0].node!==hit.node||fresh[0].pos!==hit.pos||
+      caption&&caption!==row.creator+'さん'){
+    throw new Error('リンク未設定の中断画像を確認できません。自動で貼り直しません');
+   }
+  }
   const fixed=relinkCaption(view,hit,row);
   await appendCoreDivider(view,row,fixed,{node:createCoreDivider(view)});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
@@ -3698,7 +3780,7 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
 }
 function resolveOwnedDividerHits(view,images){
  const tracked=readRun();
- if(tracked?.coreImageRun&&tracked.coreDividerFormat===1)return images.map(image=>ownedCoreDivider(view,image,tracked)).filter(Boolean);
+ if(tracked?.coreImageRun&&tracked.coreDividerFormat===1)return coreOwnedDividerNodes(view,tracked,images);
  const run=readRun(),marked=new Set((Array.isArray(run?.dividerUrls)?run.dividerUrls:[]).map(norm)),out=[];
  for(const image of images){
   if(!marked.has(norm(image.node.attrs?.link)))continue;
@@ -5054,7 +5136,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.60';
+const VERSION='2.9.61';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
