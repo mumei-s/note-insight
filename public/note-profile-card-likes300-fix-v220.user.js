@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.59
+// @version      2.9.60
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,8 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.59')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.59';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.60')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.60';
 function parseLiker(item,mediaUrl){
  const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
  if(!id||!urlname)return null;
@@ -860,7 +860,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.59';
+const VERSION='2.9.60';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1594,26 +1594,48 @@ function scopeIdentityMismatch(row,note){
 }
 function magazineMembership(note,key){return Array.isArray(note?.belonging_magazine_keys)&&note.belonging_magazine_keys.some(value=>typeof value==='string'&&value===key)}
 
+// Work-conserving read-only pool. Results retain listing order even when
+// note/profile requests finish out of order. Drain workers before returning
+// an error so a stopped run cannot launch requests in its successor.
+async function mapMagazineReadsInOrder(rows,mapper,width=4){
+ let next=0,failed=false,error;
+ const results=new Array(rows.length);
+ async function worker(){
+  while(!failed&&next<rows.length){
+   if(stopRequested){if(!failed){failed=true;error=new Error('停止しました')}return}
+   const index=next++;
+   try{results[index]=await mapper(rows[index]);}
+   catch(e){if(!failed){failed=true;error=e}}
+  }
+ }
+ await Promise.all(Array.from({length:Math.min(width,rows.length)},()=>worker()));
+ if(failed)throw error;
+ return results;
+}
+
 async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazineKeys=new Set()){
  resetSourceScopeNotes();
  page.__MUMEI_PROFILE_CARD_MIXED_SCAN_STATS__=null;
  const sources=parseUnifiedSources(raw),magazineArticles=choice==='magazine-articles';
  if(magazineArticles&&(!sources.length||sources.some(source=>source.type!=='mag')))throw new Error('マガジンURLを入力してください');
  const limit=targetLimit(mode,count),out=[],seenUrls=new Set(),creators=new Set(magazineArticles?[]:['fuku444']),creatorKeys=new Set(),choices=new Map(),issues=[],issueKeys=new Set(),cappedSources=[];
- const magazineSeen=new Set(),magazineAlready=new Set();
+ const magazineSeen=new Set(),magazineAlready=new Set(),magazineAcceptedKeys=new Set();
  let unavailable=0,scopeUnavailable=0,scopeRejected=0,fixedSkipped=0;
   const strictSelectedTags=new Set(sources.filter(x=>x.type==='tag'&&STRICT_FIRST_TAGS.has(normalizeAssignedTag(x.value))).map(x=>normalizeAssignedTag(x.value)));
   const firstPostAudits=new Map();
  const creatorId=row=>scopeAccount(row?.urlname)||scopeUrlIdentity(row?.url).account||'';
  const issue=(row,reason,source,type='unavailable')=>{
-  const account=creatorId(row),signature=[source?.type,source?.value,account||row?.key,reason].join('|');if(issueKeys.has(signature))return;issueKeys.add(signature);
+  const account=creatorId(row),signature=[source?.type,source?.value,magazineArticles?row?.key:account||row?.key,reason].join('|');if(issueKeys.has(signature))return;issueKeys.add(signature);
   if(type==='scope-rejected')scopeRejected++;else{unavailable++;if(type==='scope-unavailable')scopeUnavailable++;if(type==='fixed')fixedSkipped++;}
   if(issues.length<160)issues.push({account,articleKey:String(row?.key||''),source:source?.label||source?.value||'',reason});
  };
  const add=row=>{
   if(!row)return false;const url=norm(row.url),id=creatorId(row),stable=String(row.likerKey||'').trim();
-  if(!url||url===norm(FINAL_URL)||seenUrls.has(url)||id&&creators.has(id)||stable&&creatorKeys.has(stable))return false;
-  seenUrls.add(url);if(id)creators.add(id);if(stable)creatorKeys.add(stable);out.push({...row,url});return true;
+  if(!url||url===norm(FINAL_URL)||seenUrls.has(url)||(magazineArticles?magazineAcceptedKeys.has(row.key):(id&&creators.has(id)||stable&&creatorKeys.has(stable))))return false;
+  seenUrls.add(url);
+  if(magazineArticles)magazineAcceptedKeys.add(row.key);
+  else{if(id)creators.add(id);if(stable)creatorKeys.add(stable);}
+  out.push({...row,url});return true;
  };
  const selected=(creator,selectedChoice)=>{const id=creatorId(creator),key=id+'|'+selectedChoice;if(!choices.has(key))choices.set(key,chooseCreatorArticle({...creator,urlname:id},selectedChoice));return choices.get(key)};
  const verify=async(row,source,listed=new Set(),forceDetail=false)=>{
@@ -1677,12 +1699,33 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
   return row?{...result,row}:{row:null,reason:'紹介に必要なプロフィール・本文を取得できない',type:'scope-unavailable'};
  };
  const acceptScoped=async(rows,source,listed)=>{
+  if(magazineArticles&&mode==='all'&&typeof prepare?.preloadMagazineProfile==='function'){
+   const pending=[];
+   for(const row of rows){
+    if(!row)continue;
+    if(existingMagazineKeys.has(row.key)){magazineAlready.add(row.key);continue}
+    if(!seenUrls.has(norm(row.url)))pending.push(row);
+   }
+   const checked=await mapMagazineReadsInOrder(pending,async row=>{
+    // Identity and article safety are still checked before enrichment.
+    // The public profile read is independent and has no editor side effects.
+    const [article,profile]=await Promise.allSettled([scopedChoice(row,source,listed),prepare.preloadMagazineProfile(row)]);
+    if(article.status==='rejected')throw article.reason;
+    if(profile.status==='rejected')throw profile.reason;
+    return prepareResult(article.value);
+   });
+   if(stopRequested)throw new Error('停止しました');
+   for(let i=0;i<checked.length;i++){
+    const result=checked[i];if(result.row)add(result.row);else issue(pending[i],result.reason,source,result.type);
+   }
+   return;
+  }
   for(let offset=0;offset<rows.length&&out.length<limit;){
    if(stopRequested)throw new Error('停止しました');
    const batch=[];while(offset<rows.length&&batch.length<Math.min(6,Number.isFinite(limit)?Math.max(1,limit-out.length):6)){
     const row=rows[offset++];
     if(magazineArticles&&existingMagazineKeys.has(row.key)){magazineAlready.add(row.key);continue}
-    if(row&&!creators.has(creatorId(row))&&!seenUrls.has(norm(row.url)))batch.push(row);
+    if(row&&(magazineArticles?!magazineAcceptedKeys.has(row.key):!creators.has(creatorId(row)))&&!seenUrls.has(norm(row.url)))batch.push(row);
    }
     const checked=await Promise.all(batch.map(async row=>prepareResult(await scopedChoice(row,source,listed))));
    for(let index=0;index<checked.length;index++){const result=checked[index];if(result.row)add(result.row);else issue(batch[index],result.reason,source,result.type);if(out.length>=limit)break;}
@@ -1810,10 +1853,16 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
   const rowsFrom=list=>{
    const rows=[];
    for(const item of list){
-    const row=articleFromRaw(item,{});if(!row||candidateKeys.has(row.key))continue;
+    const row=articleFromRaw(item,{});if(!row)continue;
+    if(magazineArticles)row.key=scopeArticleKey(row.key);
+    if(candidateKeys.has(row.key))continue;
     candidateKeys.add(row.key);listed.add(row.key);
     if(magazineArticles)magazineSeen.add(row.key);
-    rows.push(magazineArticles?{...row,urlname:creatorId(row)}:row);
+    if(magazineArticles){
+     const article=item?.note||item;
+     const listedThumb=typeof article.eyecatch==='string'?mediaUrl(article.eyecatch):'';
+     rows.push({...row,urlname:creatorId(row),thumbUrl:row.thumbUrl||listedThumb,magazineListedArticle:true});
+    }else rows.push(row);
    }
    return rows;
   };
@@ -1826,17 +1875,31 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
    }continue;
   }
   if(source.type==='mag'){
-   const key=magazineKey(source.value);if(!key)continue;let start=0;
+   const key=magazineKey(source.value);if(!key)continue;let start=0,magPage=1;
    while(start<10000&&(choice==='oldest'||out.length<limit)){
-    if(stopRequested)throw new Error('停止しました');status('マガジン内の記事');
-    const payload=await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?start='+start+'&limit=100'),data=payload?.data||{};
+    if(stopRequested)throw new Error('停止しました');
+    status('マガジン内の記事'+(magazineArticles?' P.'+magPage:''));
+    const cursor=magazineArticles?'page='+magPage:'start='+start;
+    const payload=await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?'+cursor+'&limit=100'),data=payload?.data||{};
     if(magazineArticles&&!Array.isArray(data.notes))throw new Error('マガジンの掲載一覧を確認できません');
     const list=Array.isArray(data.notes)?data.notes:[],rows=rowsFrom(list);start+=list.length;
     if(choice==='oldest')candidates.push(...rows);else await acceptScoped(rows,source,listed);
     const last=data.isLastPage===true||data.is_last_page===true||data.hasMore===false||data.has_more===false;
-    if(!list.length||(magazineArticles?last:list.length<100)){exhausted=true;break}
-    // The API may return fewer entries than requested.
-    if(magazineArticles&&!rows.length)break;
+    if(magazineArticles){
+     // The verified note API uses a 1-based page cursor, not an item offset.
+     const terminal=data.next_page===null||data.next_page===undefined&&(data.last_page===true||last);
+     if(!rows.length){
+      // A repeated or wholly malformed nonempty page is not evidence of completion.
+      if(!list.length&&terminal&&magPage===1)exhausted=true;
+      break;
+     }
+     if(terminal){exhausted=true;break}
+     if(!['number','string'].includes(typeof data.next_page))break;
+     const next=Number(data.next_page);
+     if(!Number.isSafeInteger(next)||next!==magPage+1)break;
+     magPage=next;continue;
+    }
+    if(!list.length||list.length<100){exhausted=true;break}
    }
    if(magazineArticles&&!exhausted&&out.length<limit)cappedSources.push({kind:'mag',source:source.value,reason:'次の掲載記事を確認できない'});
    capped=choice==='oldest'&&!exhausted&&start>=10000;
@@ -1870,8 +1933,11 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
   }
  }
  page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__={choice,unavailable,scopeUnavailable,scopeRejected,fixedSkipped,issues,recorded:issues.length,cappedSources,mixed:page.__MUMEI_PROFILE_CARD_MIXED_SCAN_STATS__||null};
- if(magazineArticles)Object.assign(page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__,{magazineArticles:true,listed:magazineSeen.size,accepted:out.length,already:magazineAlready.size});
- if(unavailable||scopeRejected||cappedSources.length)setStatus('条件に合う記事 '+out.length+'人｜NG・タグ対象外 '+scopeRejected+'件｜条件未確認 '+unavailable+'件'+(cappedSources.length?'｜取得範囲未完了 '+cappedSources.length+'件（続きの取得要確認）':''));
+ if(magazineArticles)Object.assign(page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__,{
+  magazineArticles:true,listed:magazineSeen.size,accepted:out.length,already:magazineAlready.size,
+  profileOmitted:out.filter(row=>row.magazineProfileOmitted).length
+ });
+ if(unavailable||scopeRejected||cappedSources.length)setStatus('条件に合う記事 '+out.length+(magazineArticles?'件':'人')+'｜NG・タグ対象外 '+scopeRejected+'件｜条件未確認 '+unavailable+'件'+(cappedSources.length?'｜取得範囲未完了 '+cappedSources.length+'件（続きの取得要確認）':''));
  return out.slice(0,limit);
 }
 function sourceSelectionNotice(run=readRun()){
@@ -1884,7 +1950,8 @@ function sourceSelectionNotice(run=readRun()){
   return '｜'+parts.join('｜');
  }
  if(selection.magazineArticles){
-  parts.push('掲載 '+selection.listed+'記事・貼付 '+selection.accepted+'人');
+  parts.push('掲載 '+selection.listed+'記事・対象 '+selection.accepted+'件');
+  if(selection.profileOmitted)parts.push('公開プロフィールなし '+selection.profileOmitted+'件（紹介文省略）');
   if(selection.already)parts.push('貼付済み '+selection.already+'件');
   if(selection.scopeRejected)parts.push('紹介対象外 '+selection.scopeRejected+'件');
   if(selection.unavailable)parts.push('記事・画像・プロフィールを確認できない '+selection.unavailable+'件');
@@ -2297,8 +2364,11 @@ async function creatorProfile(id){
  if(!id)return null;
  try{
   const p=await xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)),d=p?.data??p??{},u=d.creator||d.user||d;
+  const rawProfile=u.profile??u.description??u.bio??u.introduction??u.self_introduction??u.note_intro;
   return{
-   profileText:contentApi?.clean?.(u.profile??u.description??u.bio??u.introduction??u.self_introduction??u.note_intro??'')||'',presentationAccount:String(u.urlname||u.urlName||u.url_name||'').toLowerCase(),
+   profileText:contentApi?.clean?.(rawProfile??'')||'',
+   profileVerifiedEmpty:rawProfile==null&&u.profile===null||typeof rawProfile==='string'&&!rawProfile.trim(),
+   presentationAccount:String(u.urlname||u.urlName||u.url_name||'').toLowerCase(),
    qualityProfile:qualityCall('profileEvidence',[u,id],null),
    creator:String(u.nickname||u.name||id).trim(),
    avatar:mediaUrl(u.user_profile_image_url||u.profile_image_url||u.profileImageUrl||u.user_profile_image_path||u.profile_image_path||u.profileImagePath||u.icon_url||u.image_url||'')
@@ -2356,6 +2426,8 @@ async function enrich(row,{preparedProfile,requested=contentOptions}={}){
  row=summarySelection.row;note=summarySelection.note;user=note.user||note.author||{};
  if(!articleSafetyCheck(row,note).ok)return null;
  let thumb=mediaUrl(note.eyecatch_url||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch?.url||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url||row.thumbUrl||'');
+ if(row.magazineListedArticle&&typeof note.eyecatch==='string'&&note.eyecatch.trim())thumb=mediaUrl(note.eyecatch)||thumb;
+ // The selected article's own official OGP is the existing fallback for an unset eyecatch.
  if(!thumb)thumb=await articleMetaImage(row.url);
  let avatar=mediaUrl(user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||profile?.avatar||row.actorImageUrl||'');
  const result={
@@ -2425,16 +2497,23 @@ async function buildRows(input,special=false,workmom=false,parenting=false){
  const prepared=!parenting&&!workmom&&!special;
  const magazineArticles=prepared&&input.choice==='magazine-articles';
  const requested={size:'thin',content:'profile'},profiles=new Map();
+ const loadMagazineProfile=account=>{
+  if(!profiles.has(account))profiles.set(account,creatorProfile(account));
+  return profiles.get(account);
+ };
  const prepare=async row=>{
   if(excludedCreator(row))return null;
   if(!magazineArticles)return enrich(row);
   const account=row.urlname;
-  if(!profiles.has(account))profiles.set(account,creatorProfile(account));
-  const profile=await profiles.get(account);
-  if(profile?.presentationAccount!==account||!profile?.profileText)return null;
-  const preparedRow=await enrich({...row,presentation:requested},{preparedProfile:profile,requested});
+  const profile=await loadMagazineProfile(account);
+  if(profile?.presentationAccount!==account)return null;
+  const magazineProfileOmitted=profile.profileText===''&&profile.profileVerifiedEmpty===true;
+  if(!profile.profileText&&!magazineProfileOmitted)return null;
+  const options=magazineProfileOmitted?{size:'thin',content:'name'}:requested;
+  const preparedRow=await enrich({...row,...(magazineProfileOmitted?{magazineProfileOmitted:true}:{}),presentation:options},{preparedProfile:profile,requested:options});
   return preparedRow?.thumbUrl?preparedRow:null;
  };
+ if(magazineArticles)prepare.preloadMagazineProfile=row=>row?.urlname&&!excludedCreator(row)?loadMagazineProfile(row.urlname):null;
  const raw=parenting?await collectParenting(input.mode,input.count):workmom?await collectWorkmom(input.mode,input.count):special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice,prepare,input.existingMagazineKeys);
  const seen=new Set(),rows=[];
  for(const row of raw){
@@ -2614,7 +2693,7 @@ function mediumTextLines(ctx,value,width,{honorific=false}={}){
  return out;
 }
 function drawThinArticleTitle(ctx,row,theme,layout){
- if(row.presentation?.content==='name')return;
+ if(row.presentation?.content==='name'&&!row.magazineProfileOmitted)return;
  const [left,,width]=layout.text,height=ctx.canvas.height,maxHeight=Math.min(132,height-44);
  let fontSize=26,wrapped=[];
  for(;fontSize>=18;fontSize--){
@@ -2816,7 +2895,7 @@ async function makeFile(row){
   throw Object.assign(new Error('記事サムネイルを読み込めません'),{code:'ASSET_UNAVAILABLE'});
  }
  const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=qualityCall('observeContext',[c.getContext('2d'),row,W,H],c.getContext('2d')),theme=randomThinTheme(row);
- const artworkOnly=row.presentation?.content==='name';
+ const artworkOnly=row.presentation?.content==='name'&&!row.magazineProfileOmitted;
  const ax=50,ay=H/2,ar=34,ix=artworkOnly?104:546,iy=10,iw=W-10-ix,ih=H-20;
  if(row.presentation?.size!=='medium'){
  drawThinDecor(ctx,theme);
@@ -3868,7 +3947,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
     :special
      ?{...input,mode:input.mode,count:input.count,specialTags:input.specialTags}
      :magazineArticles
-      ?{...input,mode:'all',choice:'magazine-articles',existingMagazineKeys:new Set(imageNodes(view).map(hit=>noteKey(hit.node.attrs?.link)).filter(Boolean))}
+      ?{...input,mode:'all',choice:'magazine-articles',existingMagazineKeys:new Set(imageNodes(view).map(hit=>scopeArticleKey(noteKey(hit.node.attrs?.link))).filter(Boolean))}
       :input;
 
   qualityCall('beginBatch',[{}]);
@@ -3902,7 +3981,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
   });
 
   if(magazineMembers||magazineArticles)writeMagazineMemberScan(null);
-  setStatus(magazineMembers?'共同運営メンバー '+acceptedPeople+'人｜極薄を貼り付け中':magazineArticles?'マガジン掲載記事 '+acceptedPeople+'人｜プロフィールとサムネを貼り付け中':(parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄50種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成'+(shortage?'｜注意：採用'+acceptedPeople+'/'+requestedCount+'人・取得条件/除外を確認':''));
+  setStatus(magazineMembers?'共同運営メンバー '+acceptedPeople+'人｜極薄を貼り付け中':magazineArticles?'マガジン掲載記事 '+acceptedPeople+'件｜プロフィールとサムネを貼り付け中':(parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄50種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成'+(shortage?'｜注意：採用'+acceptedPeople+'/'+requestedCount+'人・取得条件/除外を確認':''));
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    if(await pauseCoreImagesAtBoundary(i,rows.length))return;
@@ -3953,7 +4032,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    observeCoreDivider(view,row,made.hit);
    if(await pauseCoreImagesAtBoundary(i+1,rows.length))return;
-   if(i+1<rows.length)await sleep(IMAGE_PASTE_GAP)
+   if(i+1<rows.length&&(IMAGE_PASTE_GAP>0||!magazineArticles))await sleep(IMAGE_PASTE_GAP)
   }
 
   const runNow=readRun()||{};
@@ -4141,7 +4220,7 @@ async function pasteSavedSpecial(){
    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    observeCoreDivider(view,row,made.hit);
    if(await pauseCoreImagesAtBoundary(i+1,rows.length))return;
-   if(i+1<rows.length)await sleep(IMAGE_PASTE_GAP)
+   if(i+1<rows.length&&(IMAGE_PASTE_GAP>0||run.choice!=='magazine-articles'))await sleep(IMAGE_PASTE_GAP)
   }
 
   run=readRun()||run;
@@ -4442,7 +4521,7 @@ function applyMagazineMode(){
  panel.classList.toggle('magazine-source',Boolean(choice));
  panel.querySelector('[data-a="images"]').textContent=members?'① 参加者を貼る':choice?'① 掲載記事を貼る':'① 画像を貼る';
  panel.querySelector('[data-a="magazine-articles"]').hidden=!members;
- panel.querySelector('[data-amount-hint]').textContent=members?'本人を除く'+SELECT_MAGAZINE_MEMBERS.length+'人｜最新1記事。最新がなければ固定':choice?'マガジンの掲載順｜著者1人1記事｜プロフィール付き':'指定件数＋最後に「実績の算数」1件（件数外）';
+ panel.querySelector('[data-amount-hint]').textContent=members?'本人を除く'+SELECT_MAGAZINE_MEMBERS.length+'人｜最新1記事。最新がなければ固定':choice?'掲載順に全記事｜同じ著者の別記事も対象｜プロフィール付き':'指定件数＋最後に「実績の算数」1件（件数外）';
 }
 function applySpecialAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-special-mode]'),num=p?.querySelector('[data-special-count]');
@@ -4975,7 +5054,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.59';
+const VERSION='2.9.60';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
