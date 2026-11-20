@@ -114,7 +114,11 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2\.9\.15/);
+ const fix=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8');
+ const version=fix.match(/^\/\/ @version[ \t]+(\d+\.\d+\.\d+)[ \t]*$/m)?.[1];
+ assert.ok(version,'standalone version must be declared');
+ const releaseURL='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-likes300-fix-v220.user.js?v='+version;
+ assert.ok(installer.includes("location.replace('"+releaseURL+"&ts='+Date.now())"),'installer must refresh the current standalone release');
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
  assert.doesNotMatch(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require/);
 });
