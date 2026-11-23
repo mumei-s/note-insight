@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.62
+// @version      2.9.67
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,8 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.62')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.62';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.67')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.67';
 function parseLiker(item,mediaUrl){
  const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
  if(!id||!urlname)return null;
@@ -860,7 +860,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.62';
+const VERSION='2.9.67';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1071,6 +1071,7 @@ let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrl
 let cardPauseRequested=false,cardRunActive=false,cardWaitWake=null;
 let imagePauseRequested=false,imageRunActive=false;
 const CARD_SESSION='card-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+let magazineResumeWork=null;
 page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
 page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
 page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=createCardsAtTap;
@@ -1082,10 +1083,16 @@ page.__MUMEI_PROFILE_CARD_RESUME_MAGAZINE_MEMBERS__=()=>{
  if(!readMagazineMemberScan()?.paused)return false;
  void createImageList({resumeMagazineMembers:true});return true;
 };
-page.__MUMEI_PROFILE_CARD_RESUME_MIXED_TAGS__=()=>{
+page.__MUMEI_PROFILE_CARD_RESUME_MIXED_TAGS__=({appendOnly=false}={})=>{
  const saved=readJSONKey(MIXED_TAG_SCAN_PREFIX+(editorArticleKey()||'unknown'),null);
  if(![1,2].includes(saved?.version)||!Array.isArray(saved.states)||!saved.states.length)return false;
- void createImageList({special:false,workmom:false,parenting:false});return true;
+ const options=saved.appendOptions;
+ if(options){
+  if(options.choice!=='listed-tags'||options.baseRunCreatedAt!==(readRun()?.createdAt??null))return false;
+  void createImageList({resumeTagScan:options});return true;
+ }
+ if(appendOnly)return false;
+ void createImageList();return true;
 };
 function fixedRunBusy(){try{return Boolean(page.__MUMEI_PROFILE_CARD_FIXED_BUSY__?.())}catch{return false}}
 function actionBlocked(){
@@ -1356,10 +1363,10 @@ function insertWorkUrlAt(view,url,pos){
  if(live?.type!==p||live.textContent!==url)throw new Error('通知カード用URLの配置結果を確認できません');
  work.node=live;return work
 }
-async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000){
+async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000,verify=null){
  const end=Date.now()+timeout,errorGrace=2500;let errorAt=0;
  while(Date.now()<end){
-  const hit=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,url)});
+  const hit=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,url)&&(!verify||verify(h))});
   if(hit)return hit;
   if(attempt.error){if(!errorAt)errorAt=Date.now();if(Date.now()-errorAt>=errorGrace)throw attempt.error}
   if(stopRequested)throw new Error('停止しました');
@@ -1387,7 +1394,25 @@ function cardAnchor(run,fallback=0,view=null){
  if(view){const records=new Map((run?.cardKeys||[]).map(card=>[String(card.key||''),card])),baseline=new Set(run?.cardBaselineKeys||[]);for(const hit of embedNodes(view)){const rec=records.get(cardKey(hit));if(rec&&!baseline.has(cardKey(hit))&&genuineCard(hit,rec.url))anchor=valid?Math.min(anchor,hit.pos):hit.pos<anchor?hit.pos:anchor}}
  return anchor
 }
+function appendBatchCardHits(view,run,rows,includePending=true){
+ const records=new Map((run.cardKeys||[]).map(record=>[String(record.key),record.url]));
+ const allowed=new Set(rows.map(row=>norm(row.url))),baseline=new Set(run.cardBaselineKeys||[]);
+ const pending=includePending?run.pendingCard:null;
+ const embeds=embedNodes(view),counts=new Map(),hits=[];
+ for(const hit of embeds){const key=cardKey(hit);counts.set(key,(counts.get(key)||0)+1)}
+ for(const hit of embeds){
+  const key=cardKey(hit);
+  if(!key||baseline.has(key))continue;
+  let url=records.get(key);
+  if(!url&&pending?.receiptKey===key)url=pending.url;
+  if(!url||!allowed.has(norm(url))||!genuineCard(hit,url))continue;
+  if(counts.get(key)!==1)throw new Error('同じ識別番号の通知カードが複数あり、今回分を特定できません。本文を保持しました');
+  hits.push({...hit,targetUrl:norm(url)});
+ }
+ return hits.sort((a,b)=>a.pos-b.pos);
+}
 function generatedCardHits(view,run,rows=run?.rows||[]){
+ if(run?.appendTagBatch)return appendBatchCardHits(view,run,rows);
  const urls=new Map(rows.map(row=>[norm(row.url),row])),keys=new Map(rows.map(row=>[noteKey(row.url),row])),baseline=new Set(run?.cardBaselineKeys||[]),anchor=cardAnchor(run,0,view),out=[];
  for(const hit of embedNodes(view)){
   if(hit.pos<anchor||baseline.has(cardKey(hit)))continue;
@@ -1402,6 +1427,7 @@ function duplicateCardDetails(view,run,rows=run?.rows||[]){
  return rows.map(row=>({url:row.url,creator:row.creator,count:counts.get(norm(row.url))||0})).filter(row=>row.count>1)
 }
 function assertUniqueGeneratedCards(view,run,rows=run?.rows||[]){
+ if(run?.magazineCardsOnly){magazineCardOnlyState(view,run);return;}
  const duplicates=duplicateCardDetails(view,run,rows);
  if(duplicates.length)throw new Error('同じクリエイターのカードが重複しています：'+duplicates.slice(0,4).map(row=>row.creator+'さん '+row.count+'枚').join('・')+'。今ある内容は保持しました');
 }
@@ -1410,13 +1436,46 @@ function emptyCardGap(view,from,to){
  while(pos<to){const node=view.state.doc.nodeAt?.(pos);if(node?.type?.name!=='paragraph'||String(node.textContent||'').trim()||!node.nodeSize)return false;pos+=node.nodeSize}
  return pos===to
 }
-function recordNativeCard(hit,row){
+function recordNativeCard(hit,row,{observed=false}={}){
  qualityCall('nativeCard',[row,{hit}]);
  const run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],rec={url:row.url,key:cardKey(hit),creator:row.creator};
+ if(run.magazineCardsOnly){
+  const pending=run.pendingCard,matching=pending&&norm(pending.url)===norm(rec.url);
+  const proven=matching&&pending.receiptKey===rec.key;
+  if(run.magazineCardProof!==1||(!proven&&(!observed||!matching||pending.sessionId!==CARD_SESSION)))throw new Error('今回貼ったカードの作成記録を確認できません。本文は保持しました');
+  rec.proof=proven?'native-v1':'view-only-v1';rec.nodeId=String(hit.node.attrs?.id||'');
+ }
  const records=new Map(cards.map(card=>[String(card.key||''),card]));records.set(rec.key,rec);
  writeRun({...run,...(!cards.length?{cardAnchorPos:hit.pos}:{}),cardKeys:[...records.values()],pendingCard:null,updatedAt:Date.now()});return rec
 }
 async function reconcileCompletedCards(view,run,rows){
+ if(run.appendTagBatch&&run.pendingCard&&!run.pendingCard.receiptKey){
+  const done=appendBatchCardHits(view,run,rows,false).length;
+  if(!rows[done]||norm(run.pendingCard.url)!==norm(rows[done].url))throw new Error('中断したカードと今回の貼り付け対象を照合できません');
+  if(!await recoverEmptyMagazineCardAttempt(view,run,done))return reconcileCompletedCards(view,readRun()||run,rows);
+ }
+ if(run.magazineCardsOnly){
+  const {hits,missing}=magazineCardOnlyState(view,run);
+  if(missing)throw new Error('今回分のカードが手動で外されたため再開を停止しました。「今回のカードだけ一括削除」で残りを整理できます');
+  if(hits.some((hit,index)=>!rows[index]||!genuineCard(hit,rows[index].url)))throw new Error('保存済みカードの順序を照合できません。本文は変更していません');
+  const pending=run.pendingCard;
+  if(pending&&!pending.receiptKey){
+   const next=rows[hits.length];
+   if(!next||norm(next.url)!==norm(pending.url))throw new Error('中断したカードが次の掲載記事と一致しません。本文は変更していません');
+   if(await recoverEmptyMagazineCardAttempt(view,run,hits.length))return run;
+   return reconcileCompletedCards(view,readRun()||run,rows);
+  }
+  const all=embedNodes(view);
+  if(rows.slice(hits.length).some(row=>all.some(hit=>genuineCard(hit,row.url))))throw new Error('未処理の記事と同じURLの手動カードがあるため、本文は変更せずに停止しました');
+  if(pending?.receiptKey){
+   const match=hits.find(hit=>cardKey(hit)===pending.receiptKey&&genuineCard(hit,pending.url));
+   if(!match)throw new Error('中断したカードの識別子を照合できません。本文は変更していません');
+   recordNativeCard(match,rows[hits.indexOf(match)]);
+   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+   return readRun()||run;
+  }
+  return run;
+ }
  assertUniqueGeneratedCards(view,run,rows);
  const hits=generatedCardHits(view,run,rows),cards=new Map((run.cardKeys||[]).map(card=>[String(card.key||''),card]));
  const anchor=cardAnchor(run,0,view);let pos=anchor,changed=false;
@@ -1437,20 +1496,25 @@ async function createNativeCard(view,row,insertPos){
  await qualityGate(row,null,'cards');
  let run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],baseline=new Set(run.cardBaselineKeys||[]);
  assertUniqueGeneratedCards(view,run);
- const existing=generatedCardHits(view,run).filter(hit=>genuineCard(hit,row.url));
+ const magazineOnly=run.magazineCardsOnly===true;
+ const savedWork=(magazineOnly||run.appendTagBatch)&&magazineResumeWork;
+ const reuse=Boolean(savedWork&&savedWork.view===view&&savedWork.runId===run.createdAt&&savedWork.pending.sessionId===run.pendingCard?.sessionId&&savedWork.pending.startedAt===run.pendingCard?.startedAt&&savedWork.pos===run.pendingCard?.pos&&!run.pendingCard?.receiptKey&&norm(run.pendingCard?.url)===norm(row.url)&&norm(savedWork.url)===norm(row.url));
+ if(reuse)magazineResumeWork=null;
+ const existing=(magazineOnly?magazineCardOnlyState(view,run).hits:generatedCardHits(view,run)).filter(hit=>genuineCard(hit,row.url));
  if(existing.length){
   const hit=existing[0];if(!emptyCardGap(view,insertPos,hit.pos))throw new Error('同じカードが別の位置にあります。再送せず、今ある内容を保持しました');
   const rec=recordNativeCard(hit,row);await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();return{rec,nextPos:hit.pos+hit.node.nodeSize}
  }
  if(run.pendingCard&&norm(run.pendingCard.url)===norm(row.url)&&run.pendingCard.sessionId===CARD_SESSION)throw new Error('前のカード変換の結果を確認できないため再送を停止しました。下書き保存→再読み込み→②で再開してください。今ある内容は保持しています');
- writeRun({...run,pendingCard:{sessionId:CARD_SESSION,url:row.url,pos:insertPos,startedAt:Date.now()},updatedAt:Date.now()});
+ if(magazineOnly&&(run.pendingCard&&!reuse||embedNodes(view).some(hit=>genuineCard(hit,row.url))))throw new Error('手動カードや中断カードを混ぜないため停止しました。本文は保持しています');
+ writeRun({...run,pendingCard:{sessionId:CARD_SESSION,url:row.url,pos:reuse?savedWork.pos:insertPos,startedAt:Date.now()},updatedAt:Date.now()});
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
  if(stopRequested)throw new Error('手動停止');
  const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
  let requested=false,hit,work=null;
  try{
  if(stopRequested)throw new Error('手動停止');
- work=insertWorkUrlAt(view,row.url,insertPos);
+ work=reuse?selectMagazineRetryUrl(view,savedWork,row.url):insertWorkUrlAt(view,row.url,insertPos);
  const workNode=work.node,attempt={error:null},current=readRun()||run;
  // Persist the fitted position before sending the native conversion request.
  if(current.pendingCard?.pos!==work.pos||!cards.length&&current.cardAnchorPos!==work.pos){
@@ -1464,22 +1528,34 @@ async function createNativeCard(view,row,insertPos){
   try{
    if(consumedNode!==workNode&&!consumedNode?.eq?.(workNode))throw new Error('通知カード用URLが変更されました');
    view.dispatch(tr)
-  }catch(e){attempt.error=e}
+  }catch(e){attempt.error=e;return}
+  // Never veto a transaction or block the native paste on our ownership
+  // observation. Ownership is a separate prerequisite for bulk deletion.
+  if(magazineOnly||run.appendTagBatch)try{observeMagazineNativeDispatch(view,run,row,work,tr,beforeKeys)}catch{}
  },view);
  if(!handled){const error=new Error('note正規URLカード処理が未処理です');error.cardTerminal=true;throw error}
- try{hit=await waitNewCard(view,row.url,beforeKeys,attempt,45000)}
+ const verify=run.appendTagBatch?candidate=>{
+  const receipt=readRun()?.pendingCard?.receiptKey;
+  if(receipt)return cardKey(candidate)===receipt;
+  return candidate.pos===work.pos||candidate.pos===work.pos+work.node.nodeSize&&view.state.doc.nodeAt(work.pos)===work.node;
+ }:null;
+ try{hit=await waitNewCard(view,row.url,beforeKeys,attempt,45000,verify)}
  catch(e){
-  const recovered=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,row.url)});
-  if(recovered)hit=recovered;else throw e
+  const recovered=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,row.url)&&(!verify||verify(h))});
+  if(recovered)hit=recovered;
+  else if(magazineOnly&&!stopRequested)throw new Error('noteのカード変換を確認できません。下書きを保存して同じ編集画面を開き直し、表示を確認してください：'+String(e?.message||e).slice(0,110));
+  else throw e
  }
- deleteExtraWorkUrl(view,row.url,rawBefore,work);
+ if(magazineOnly&&embedNodes(view).filter(h=>genuineCard(h,row.url)).length!==1)throw new Error('同じ記事のカードが複数あります。本文を保持して停止しました');
+ if(!reuse||readRun()?.pendingCard?.receiptKey===cardKey(hit))deleteExtraWorkUrl(view,row.url,rawBefore,work);
  hit=embedNodes(view).find(h=>cardKey(h)===cardKey(hit))||hit;
  if(!genuineCard(hit,row.url))throw new Error('正規通知カードの照合に失敗しました');
  assertUniqueGeneratedCards(view,readRun()||run);
- const rec=recordNativeCard(hit,row);
+ const rec=recordNativeCard(hit,row,{observed:magazineOnly});
  return{rec,nextPos:hit.pos+hit.node.nodeSize}
  }catch(error){
-  if(!requested||knownCardFailure(error)){if(work)deleteExtraWorkUrl(view,row.url,rawBefore,work);const current=readRun()||run;writeRun({...current,pendingCard:null,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
+  const after=readRun()||run;
+  if((!requested||knownCardFailure(error))&&!((magazineOnly||run.appendTagBatch)&&after.pendingCard?.receiptKey)){if(work&&!reuse)deleteExtraWorkUrl(view,row.url,rawBefore,work);const current=readRun()||run;writeRun({...current,pendingCard:null,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
   throw error
  }
 }
@@ -1583,6 +1659,16 @@ function normalizeSearch(j){
  const d=j?.data??j??{},notes=d.notes||{},arr=notes.contents||notes.notes||d.contents||[];
  return{arr:Array.isArray(arr)?arr:[],cursor:d?.cursor?.note??d.note_cursor??notes.next_cursor??notes.cursor??null,last:notes.is_last_page===true||notes.isLastPage===true}
 }
+async function newestHashtagPage(tag,cursor){
+ const pageNumber=Number(cursor)||1;
+ const payload=await xhrJSON('https://note.com/api/v3/hashtags/'+encodeURIComponent(tag)+'/notes?order=new&page='+pageNumber),data=payload?.data;
+ if(!Array.isArray(data?.notes))throw new Error('#'+tag+' の新着一覧を確認できません');
+ const last=data.is_last_page??data.isLastPage,rawNext=data.next_page??data.nextPage;
+ if(last===true||rawNext==null&&!data.notes.length||last!==false&&(data.next_page===null||data.nextPage===null))return{arr:data.notes,cursor:null,last:true};
+ const next=Number(rawNext);
+ if(!Number.isSafeInteger(next)||next!==pageNumber+1)throw new Error('#'+tag+' の次ページを確認できません');
+ return{arr:data.notes,cursor:String(next),last:false};
+}
 function targetLimit(mode,count){return mode==='all'?Infinity:Math.max(0,Number(count||0))}
 
 let sourceScopeNotes=new Map();
@@ -1643,8 +1729,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
  const limit=targetLimit(mode,count),out=[],seenUrls=new Set(),creators=new Set(magazineArticles?[]:['fuku444']),creatorKeys=new Set(),choices=new Map(),issues=[],issueKeys=new Set(),cappedSources=[];
  const magazineSeen=new Set(),magazineAlready=new Set(),magazineAcceptedKeys=new Set();
  let unavailable=0,scopeUnavailable=0,scopeRejected=0,fixedSkipped=0;
-  const strictSelectedTags=new Set(sources.filter(x=>x.type==='tag'&&STRICT_FIRST_TAGS.has(normalizeAssignedTag(x.value))).map(x=>normalizeAssignedTag(x.value)));
-  const firstPostAudits=new Map();
+ const firstPostAudits=new Map();
  const creatorId=row=>scopeAccount(row?.urlname)||scopeUrlIdentity(row?.url).account||'';
  const issue=(row,reason,source,type='unavailable')=>{
   const account=creatorId(row),signature=[source?.type,source?.value,listedByArticle?row?.key:account||row?.key,reason].join('|');if(issueKeys.has(signature))return;issueKeys.add(signature);
@@ -1653,7 +1738,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
  };
  const add=row=>{
   if(!row)return false;const url=norm(row.url),id=creatorId(row),stable=String(row.likerKey||'').trim();
-  if(!url||url===norm(FINAL_URL)||seenUrls.has(url)||(listedTags&&id==='fuku444')||(listedByArticle?magazineAcceptedKeys.has(row.key):(id&&creators.has(id)||stable&&creatorKeys.has(stable))))return false;
+  if(!url||url===norm(FINAL_URL)||seenUrls.has(url)||(listedTags&&(id==='fuku444'||existingMagazineKeys.has(row.key)))||(listedByArticle?magazineAcceptedKeys.has(row.key):(id&&creators.has(id)||stable&&creatorKeys.has(stable))))return false;
   seenUrls.add(url);
   if(listedByArticle)magazineAcceptedKeys.add(row.key);
   else{if(id)creators.add(id);if(stable)creatorKeys.add(stable);}
@@ -1696,8 +1781,8 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
   if(source.type==='mag')return listed.has(row.key)||magazineMembership(note,sourceScope.magazineKey)?{row:scoped,date}:{row:null,reason:'固定記事のマガジン所属なし・未確認',type:'fixed'};
   const tags=assignedTags(note);
   if(tags.names.includes(sourceScope.tag)){
-    // A first-note tag remains strict even when this article came from #自己紹介.
-    if(strictSelectedTags.size&&tags.names.some(tag=>STRICT_FIRST_TAGS.has(tag))){
+    if(sourceScope.tag===SELF_INTRO_TAG&&!String(note.name||note.title||'').includes(SELF_INTRO_TAG))return{row:null,reason:'記事タイトルに「自己紹介」がない',type:'scope-rejected'};
+    if(STRICT_FIRST_TAGS.has(sourceScope.tag)){
      const id=creatorId(scoped),auditKey=id+'|'+scoped.key;
      if(!id)return{row:null,reason:'初投稿者のアカウント未確認',type:'scope-rejected'};
      if(!firstPostAudits.has(auditKey))firstPostAudits.set(auditKey,creatorSinglePublicArticle(scoped));
@@ -1779,7 +1864,8 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
  const collectMixedTags=async(tagSources)=>{
   const key=MIXED_TAG_SCAN_PREFIX+(editorArticleKey()||'unknown');
   const sourceList=sources.map(x=>x.type+'|'+x.value);
-  const signature=JSON.stringify({sources:sourceList,choice,policy:listedTags?'exact-tag-articles-v1':'strict-first-note-v4',presentation:prepare?contentOptions:undefined});
+  const signature=JSON.stringify({sources:sourceList,choice,policy:'newest-hashtags-title-and-first-v1',presentation:prepare?contentOptions:undefined});
+  const appendOptions=listedTags?{sources:raw,mode,count,choice,presentation:contentOptions,baseRunCreatedAt:readRun()?.createdAt??null}:null;
   const saved=readJSONKey(key,null);
   // Older checkpoints removed a note from all tags after checking one result.
   // Start their scan again to recover candidates already omitted from the queues.
@@ -1793,7 +1879,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
   if(restored)for(const row of saved.rows||[])add(row);
   const testKey=(source,row)=>source.value+'|'+row.key;
   const canFetch=st=>!st.done&&!st.blocked;
-  const checkpoint=()=>writeJSONKey(key,{version:2,signature,states:states.map(st=>({page:st.page,cursor:st.cursor,done:st.done,buffer:st.buffer,visited:[...st.visited]})),tested:[...tested],pending,rows:out,checked,duplicates,active:!stopRequested&&!imagePauseRequested,updatedAt:Date.now()});
+  const checkpoint=()=>writeJSONKey(key,{version:2,signature,...(appendOptions?{appendOptions}:{}),states:states.map(st=>({page:st.page,cursor:st.cursor,done:st.done,buffer:st.buffer,visited:[...st.visited]})),tested:[...tested],pending,rows:out,checked,duplicates,active:!stopRequested&&!imagePauseRequested,updatedAt:Date.now()});
   const interrupted=()=>{
    if(stopRequested)throw new Error('停止しました');
    if(imagePauseRequested){checkpoint();throw Object.assign(new Error('タグ混合取得を一時停止しました'),{code:'PAUSED'})}
@@ -1806,8 +1892,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
     setStatus('タグ'+tagSources.length+'種類を投稿日時順に混合｜#'+st.source.value+' '+st.page+'ページ｜採用'+out.length+(mode==='all'?' / 全数':' / '+limit));
     let result;
     try{
-     const payload=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.source.value)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
-     result=normalizeSearch(payload);
+     result=await newestHashtagPage(st.source.value,st.cursor);
     }catch(error){
      if(stopRequested)throw error;
      st.blocked=true;
@@ -1817,7 +1902,7 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
     }
     st.buffer=result.arr.map(raw=>articleFromRaw(raw,{})).filter(row=>row&&Number.isFinite(Date.parse(row.publishAt||''))).map(row=>listedTags?{...row,key:scopeArticleKey(row.key),urlname:creatorId(row)}:row).sort((a,b)=>Date.parse(b.publishAt)-Date.parse(a.publishAt));
     const next=result.cursor==null?'':String(result.cursor);
-    if(result.last||!result.arr.length||!next&&result.arr.length<20)st.done=true;
+    if(result.last)st.done=true;
     else if(!next||st.visited.has(next)){
      st.blocked=true;st.page--;
      cappedSources.push({kind:'tag',source:st.source.label,limit:st.page*20,reason:'検索の次ページを確認できず途中終了'});
@@ -1834,6 +1919,13 @@ async function collectUnified(raw,mode,count,choice,prepare=null,existingMagazin
     while(pending.length<batchSize){
      await Promise.all(states.filter(st=>canFetch(st)&&!st.buffer.length).map(fill));
      interrupted();
+     if(listedTags){
+      const missing=states.filter(st=>st.blocked);
+      if(missing.length){
+       checkpoint();
+       throw Object.assign(new Error(missing.map(st=>'#'+st.source.value).join('・')+' の新着順を確認できません。「再開」でこのページから続けられます'),{code:'TAG_FEED_PAUSED'});
+      }
+     }
      const ready=states.filter(st=>st.buffer.length);
      if(!ready.length)break;
      ready.sort((a,b)=>(Date.parse(b.buffer[0].publishAt||'')||0)-(Date.parse(a.buffer[0].publishAt||'')||0));
@@ -2249,26 +2341,15 @@ async function collectParenting(mode,count){
 }
 
 async function specialTagAudit(row,tag){
- let note={},doc=null;
- try{const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));note=p?.data||p||{}}catch{}
- try{const html=String(await xhr(row.url,'text',45000)||'');doc=new DOMParser().parseFromString(html,'text/html')}catch{}
- const tagDump=JSON.stringify(note.hashtags||note.tags||note.hashtag_names||note.tag_names||note.note_hashtags||[]);
- const verifiedTags=assignedTags(note).names;
- let exactTag=verifiedTags.includes(tag);
- if(!exactTag&&doc){
-  exactTag=[...doc.querySelectorAll('a')].some(a=>{
-   const label=String(a.textContent||'').trim().replace(/^#/,'');
-   let href=String(a.getAttribute('href')||'');try{href=decodeURIComponent(href)}catch{}
-   const path=href.split(/[?#]/)[0].replace(/\/$/,'');
-   return label===tag||path.match(/\/hashtag\/([^/]+)$/)?.[1]===tag
-  })
- }
- if(!exactTag)return{ok:false,reason:'#'+tag+'タグ確認不可'};
- const parts=[row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,doc?.querySelector('article')?.textContent||doc?.querySelector('main')?.textContent||''];
- const text=parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim();
- const blocked=specialBlockedReason(text);if(blocked)return{ok:false,reason:blocked};
- // #自己紹介 remains general self-introduction, not a one-public-article tag.
- return{ok:true,reason:'',tags:verifiedTags}
+ let note;
+ try{const payload=await scopeNote(row.key);note=payload?.data||payload}catch{return{ok:false,reason:'記事詳細を確認できない'}}
+ if(!note||note.key!==row.key||scopeIdentityMismatch(row,note)||!assignedTags(note).names.includes(tag))return{ok:false,reason:'#'+tag+'タグ確認不可'};
+ if(tag===SELF_INTRO_TAG&&!String(note.name||note.title||'').includes(SELF_INTRO_TAG))return{ok:false,reason:'記事タイトルに「自己紹介」がない'};
+ const audit=articleSafetyCheck(row,note);if(!audit.ok)return audit;
+ let articleText='';
+ try{const html=String(await xhr(row.url,'text',45000)||''),doc=new DOMParser().parseFromString(html,'text/html');articleText=doc.querySelector('article')?.textContent||doc.querySelector('main')?.textContent||''}catch{}
+ const reason=specialBlockedReason(articleText);
+ return{ok:!reason,reason};
 }
 async function collectFirstNoteSpecial(mode,count,selectedTags){
  const limit=targetLimit(mode,count);
@@ -2280,14 +2361,12 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  const excluded=specialExcludedSets();
  const saved=readScan();
  const effectiveLimit=limit;
- const sig=JSON.stringify({tags:[...tags].sort(),policy:'strict-first-note-v3'});
- let oldSig=null;try{oldSig=JSON.parse(saved?.signature||'null')}catch{}
- const compatible=JSON.stringify(oldSig?.tags)===JSON.stringify([...tags].sort());
+ const sig=JSON.stringify({tags:[...tags].sort(),policy:'newest-hashtags-title-and-first-v1'});
  const liveLimit=()=>mode==='all'?Infinity:Math.max(1,Math.min(5000,Number(document.querySelector('#'+PANEL+' [data-count]')?.value||effectiveLimit||1)));
  const anchorPos=Number(saved?.anchorPos||0)||null;
  let states,tested,out,scanned,rejects;
  const creatorIdentity=row=>String(row?.urlname||'').trim().toLowerCase();
- if(saved?.version===1&&compatible&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
+ if(saved?.version===1&&saved.signature===sig&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
   states=saved.states.map(st=>({...st,buffer:Array.isArray(st.buffer)?st.buffer:[]}));
   tested=new Set(Array.isArray(saved.tested)?saved.tested:[]);
   out=saved.out;scanned=Number(saved.scanned||tested.size||0);rejects=saved.rejects&&typeof saved.rejects==='object'?saved.rejects:{};
@@ -2299,37 +2378,12 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  }
  const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,rejects,anchorPos,active:!stopRequested,updatedAt:Date.now()});
  const reject=reason=>{const key=String(reason||'その他');rejects[key]=Number(rejects[key]||0)+1};
- const acceptedCreators=new Set();
- if(out.length){
-  const valid=[];
-  // Validate historical cached selections when the policy changed, and always
-  // deduplicate by creator (not merely by article).
-  for(let i=0;i<out.length;i+=6){
-   if(stopRequested)throw new Error('停止しました');
-   const rows=out.slice(i,i+6);
-   const audited=saved?.signature===sig?rows:await Promise.all(rows.map(async row=>{
-    const tag=String(row.specialSourceTag||'');
-    if(!tags.includes(tag))return null;
-    const check=await specialTagAudit(row,tag);
-    if(!check.ok)return null;
-    const needsSingle=STRICT_FIRST_TAGS.has(tag)||tags.some(t=>STRICT_FIRST_TAGS.has(t)&&check.tags?.includes(t));
-    return needsSingle&&!(await creatorSinglePublicArticle(row))?null:{...row,specialFirstNote:needsSingle};
-   }));
-   for(const row of audited){
-    if(!row){reject('保存候補の条件再確認で除外');continue}
-    const id=creatorIdentity(row);
-    if(!id||acceptedCreators.has(id)){reject(!id?'クリエイターIDなし':'同一クリエイター重複');continue}
-    acceptedCreators.add(id);valid.push(row);
-   }
-  }
-  out=valid;checkpoint();
- }
+ const acceptedCreators=new Set(out.map(creatorIdentity));
  async function fill(st){
   while(!stopRequested&&!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
    setStatus('第二弾｜#'+st.tag+' 新着 '+st.page+'ページ｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
-   const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.tag)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
-   const q=normalizeSearch(p),rows=[];
+   const q=await newestHashtagPage(st.tag,st.cursor),rows=[];
    for(const raw of q.arr){const row=articleFromRaw(raw,{}),u=norm(row?.url);if(row&&u&&u!==norm(FINAL_URL))rows.push({...row,url:u})}
    rows.sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
    st.buffer=rows;
@@ -2349,15 +2403,16 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   if(!chosenRow)break;
   chosenState.buffer.shift();scanned++;
   const u=norm(chosenRow.url),creator=creatorIdentity(chosenRow),key=noteKey(u);
-  if(tested.has(u)){reject('同一記事重複');checkpoint();continue}
-  if(!creator||acceptedCreators.has(creator)){tested.add(u);reject(!creator?'クリエイターIDなし':'同一クリエイター重複');checkpoint();continue}
-  tested.add(u);checkpoint();
+  const pair=chosenState.tag+'|'+key;
+  if(tested.has(pair)){reject('同一記事重複');checkpoint();continue}
+  if(!creator||acceptedCreators.has(creator)){tested.add(pair);reject(!creator?'クリエイターIDなし':'同一クリエイター重複');checkpoint();continue}
+  tested.add(pair);checkpoint();
   if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key)){reject('前回掲載済み');checkpoint();continue}
   setStatus('第二弾｜#'+chosenState.tag+'｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
   const audit=await specialTagAudit(chosenRow,chosenState.tag);
   if(stopRequested){checkpoint();throw new Error('停止しました')}
   if(!audit.ok){reject(audit.reason);checkpoint();continue}
-  const requiresSingle=STRICT_FIRST_TAGS.has(chosenState.tag)||tags.some(tag=>STRICT_FIRST_TAGS.has(tag)&&audit.tags?.includes(tag));
+  const requiresSingle=STRICT_FIRST_TAGS.has(chosenState.tag);
   if(requiresSingle){
    const single=await creatorSinglePublicArticle(chosenRow);
    if(stopRequested){checkpoint();throw new Error('停止しました')}
@@ -3630,7 +3685,7 @@ function resolveOwnedImageHits(view){
    if(matches.length===1)owned.set(matches[0].pos,matches[0])
   }
  }
- for(const h of all)if(legacyOwnedMarker(h.node))owned.set(h.pos,h);
+ if(!run?.appendTagBatch)for(const h of all)if(legacyOwnedMarker(h.node))owned.set(h.pos,h);
  return[...owned.values()]
 }
 function deleteHits(view,hits){
@@ -3719,6 +3774,7 @@ async function saveNativeDraftOnce(label){
 }
 function resolveOwnedCardHits(view){
  const run=readRun(),cards=Array.isArray(run?.cardKeys)?run.cardKeys:[],baseline=new Set(run?.cardBaselineKeys||[]),hits=new Map();
+ if(run?.appendTagBatch)return appendBatchCardHits(view,run,run.rows||[],false);
  for(const rec of cards){
   if(baseline.has(String(rec.key||'')))continue;
   const hit=embedNodes(view).find(h=>cardKey(h)===String(rec.key||'')&&genuineCard(h,rec.url));
@@ -3747,6 +3803,7 @@ function trackedContentCount(view){
  return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length,activities:resolveOwnedActivityHits(view).length}
 }
 function recoverNotificationCardHits(view,run){
+ if(run.appendTagBatch)return appendBatchCardHits(view,run,run.rows||[]);
  const baseline=new Set(run.cardBaselineKeys||[]);
  const urls=new Set((run.rows||[]).map(row=>norm(row.url)));
  const linked=new Set(imageNodes(view).map(hit=>norm(hit.node.attrs?.link)).filter(url=>urls.has(url)&&noteKey(url)));
@@ -3791,11 +3848,150 @@ function notificationCardBaselinePositions(view,run){
  }
  return positions;
 }
+// Ownership for the card-only batch is opaque note embed key + article URL,
+ // never a URL or previous numeric position alone.
+function magazineCardOnlyState(view,run,{forRemoval=false}={}){
+ const all=embedNodes(view),baseline=notificationCardBaselinePositions(view,run),tops=new Set(),byKey=new Map(),hits=[];
+ view.state.doc.forEach((node,pos)=>{if(node.type?.name==='embed')tops.add(pos)});
+ for(const hit of all){
+  const key=cardKey(hit);if(!byKey.has(key))byKey.set(key,[]);
+  byKey.get(key).push(hit);
+ }
+ const pending=run.pendingCard,records=new Map(),rows=new Set((run.rows||[]).map(row=>norm(row.url)));
+ if(run.magazineCardProof!==1)throw new Error('旧試用版の作成記録では今回分を証明できないため、再開も一括削除もしません。本文は変更していません。対象だけを下書きで手動確認してください');
+ const fail=()=>{throw new Error('今回分のカードの識別子を確認できないため、本文は変更していません。該当カードを手動で確認してください')};
+ for(const rec of [...(run.cardKeys||[]),...(pending?.receiptKey?[{key:pending.receiptKey,url:pending.url,proof:'native-v1',nodeId:pending.receiptNodeId}]:[])]){
+  if(!['native-v1','view-only-v1'].includes(rec.proof)||!/^emb[a-z0-9]+$/i.test(String(rec.key||''))||!rows.has(norm(rec.url)))fail();
+  if(records.has(rec.key)&&norm(records.get(rec.key).url)!==norm(rec.url))fail();
+  records.set(rec.key,rec);
+ }
+ let missing=0;
+ for(const [key,rec] of records){
+  const candidates=byKey.get(key)||[];
+  if(!candidates.length){
+   // A different key for the same URL may be a newly/manual card. Do not
+   // substitute it, and never delete either ambiguous content or this batch.
+   if(all.some(hit=>genuineCard(hit,rec.url)))fail();
+   missing++;continue;
+  }
+  const hit=candidates[0];
+  if(candidates.length!==1||!tops.has(hit.pos)||baseline.has(hit.pos)||!genuineCard(hit,rec.url)||rec.nodeId&&String(hit.node.attrs?.id||'')!==rec.nodeId)fail();
+  if(forRemoval&&rec.proof!=='native-v1')throw new Error('一部カードの作成元を証明できません。既存カードを守るため一括削除は行いません。該当カードを手動で確認してください');
+  hits.push(hit);
+ }
+ return{hits:hits.sort((a,b)=>a.pos-b.pos),missing};
+}
+function magazineCardLoading(node,url=''){
+ const type=String(node?.type?.name||'').replace(/[-_]/g,'').toLowerCase();
+ const known=/^(?:embed(?:loading|placeholder|pending)?|url(?:card|embed)(?:loading|placeholder|pending)|(?:loading|pending)(?:embed|urlcard))$/.test(type);
+ if(!known)return false;
+ const html=String(node?.attrs?.htmlForEmbed||'').trim();
+ if(type==='embed'&&html)return false;
+ const src=String(node?.attrs?.url||node?.attrs?.src||'').trim();
+ return !url||!src||norm(src)===norm(url);
+}
+function magazineCardVisibleAttempt(view,url){
+ const results={card:false,raw:[],loading:false};
+ view.state.doc.descendants((node,pos)=>{
+  if(node?.type?.name==='embed'&&genuineCard({node,pos},url))results.card=true;
+  if(node?.type?.name==='paragraph'&&String(node.textContent||'').trim()&&norm(node.textContent.trim())===norm(url))results.raw.push({node,pos});
+  if(magazineCardLoading(node))results.loading=true;
+ });
+ return results;
+}
+async function recoverEmptyMagazineCardAttempt(view,run,completed){
+ const pending=run.pendingCard;
+ if(!pending||pending.receiptKey||run.articleKey!==editorArticleKey())throw new Error('中断したカードの下書きを確認できません');
+ const visible=magazineCardVisibleAttempt(view,pending.url);
+ if(visible.card)throw new Error('同じ記事のカードがあり作成元を確認できません。手動カードを守るため、再取り込み・再送しません');
+ if(pending.sessionId===CARD_SESSION||!Number.isFinite(pending.startedAt)||Date.now()-pending.startedAt<45000)
+  throw new Error('前のカード変換を待っています。下書き保存後、同じ編集画面を開き直して「再開」を押してください');
+ if(visible.loading)throw new Error('読み込み中の点々の枠が残っています。今回の挿入位置の点々の枠だけ確認して手動で外し、下書き保存後に「再開」を押してください');
+ if(visible.raw.length){
+  // Older versions did not record the entire baseline. Never guess that an
+  // exact URL line is ours: the user must tap its text before pressing 再開.
+  const [hit]=visible.raw,selection=view.state.selection,inside=Boolean(selection)&&selection.from===selection.to&&selection.from>hit.pos&&selection.from<hit.pos+hit.node.nodeSize;
+  let root=false;view.state.doc.forEach((node,pos)=>{if(node===hit.node&&pos===hit.pos)root=true});
+  if(visible.raw.length!==1||!root||hit.pos!==pending.pos||!inside)
+   throw new Error('前回残ったURL行を確認してください。そのURLの文字内をタップして「再開」。同じURLが複数ある場合、本文は変更しません');
+  magazineResumeWork={...hit,view,doc:view.state.doc,runId:run.createdAt,pending,url:pending.url};
+  setStatus('残ったURL行を使い、重複させずにカードへ変換します');
+  return true;
+ }
+ writeRun({...run,pendingCard:null,cardAnchorPos:completed?run.cardAnchorPos:null,updatedAt:Date.now()});
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+ setStatus('前のカードが未作成と確認できました。重複させずに続けます');
+}
+function selectMagazineRetryUrl(view,saved,url){
+ const doc=view.state.doc,start=doc.nodeAt(saved.pos);
+ if(doc!==saved.doc||start!==saved.node||norm(start.textContent.trim())!==norm(url))throw new Error('残ったURL行の位置が変わりました。本文は変更していません');
+ view.focus();
+ if(view.state.doc.nodeAt(saved.pos)!==start)throw new Error('残ったURL行の位置が変わりました。本文は変更していません');
+ const cursor=saved.pos+start.nodeSize-1;
+ if(view.state.selection.from!==cursor||view.state.selection.to!==cursor)
+  view.dispatch(view.state.tr.setSelection(exactEditorTextSelection(view.state.doc,cursor,'残ったカード用URL')));
+ if(view.state.doc.nodeAt(saved.pos)!==start||view.state.selection.from!==cursor||view.state.selection.to!==cursor)
+  throw new Error('残ったURL行のカーソル位置を確認できません');
+ return{node:start,pos:saved.pos};
+}
+function magazineNativeTarget(hit,url){
+ if(hit.node?.type?.name!=='embed'||!/^emb[a-z0-9]+$/i.test(cardKey(hit)))return false;
+ const src=cardUrl(hit);if(src===norm(url))return true;
+ try{const target=new URL(src);return target.origin==='https://note.com'&&target.pathname.match(/^[/]embed[/]notes[/](n[a-f0-9]{12})[/]?$/i)?.[1]===noteKey(url)}catch{return false}
+}
+function observeMagazineNativeDispatch(view,run,row,work,tr,beforeKeys){
+ // Observe after native dispatch. No document change, no wait dependency.
+ // Accept a stable opaque key from this transaction even if note fills the
+ // rendered iframe later; waitNewCard still requires the final genuine card.
+ const current=readRun(),pending=current?.pendingCard;
+ if(!(current?.appendTagBatch||current?.magazineCardsOnly&&current.magazineCardProof===1)||current.createdAt!==run.createdAt||current.articleKey!==run.articleKey||
+    editorArticleKey()!==run.articleKey||pending?.sessionId!==CARD_SESSION||norm(pending.url)!==norm(row.url)||pending.pos!==work.pos||pending.receiptKey)return;
+ const previous=new Set(beforeKeys);
+ tr.before?.descendants?.(node=>{const key=cardKey({node});if(key)previous.add(key)});
+ if(!tr.before)return;
+ const emitted=[];
+ tr.doc?.forEach?.((node,pos)=>{
+  const hit={node,pos};
+  if(!previous.has(cardKey(hit))&&magazineNativeTarget(hit,row.url)&&pos>=Math.max(0,work.pos-4)&&pos<=work.pos+work.node.nodeSize+4)emitted.push(hit);
+ });
+ if(emitted.length!==1)return;
+ const key=cardKey(emitted[0]),live=embedNodes(view).filter(hit=>cardKey(hit)===key);
+ if(live.length!==1||!magazineNativeTarget(live[0],row.url))return;
+ writeRun({...current,pendingCard:{...pending,receiptKey:key,receiptNodeId:String(live[0].node.attrs?.id||'')},updatedAt:Date.now()});
+}
+async function deleteMagazineBatchCards(view,run,{confirm=true,save=true}={}){
+ if(run.pendingCard&&!run.pendingCard.receiptKey)throw new Error('中断したカードの識別子を確認できません。下書きで該当カードを手動で確認してください。本文は変更していません');
+ const append=Boolean(run.appendTagBatch);
+ const state=append?{hits:appendBatchCardHits(view,run,run.rows||[])}:magazineCardOnlyState(view,run,{forRemoval:true});
+ const hits=state.hits;
+ const missing=append?Math.max(0,new Set([...(run.cardKeys||[]).map(record=>record.key),run.pendingCard?.receiptKey].filter(Boolean)).size-hits.length):state.missing;
+ const saveFlag=append?'appendCardDeleteSavePending':'clearSavePending';
+ if(!hits.length&&!missing&&!run[saveFlag])return{removedCards:0,missing:0};
+ if(append&&run.pendingCard&&!hits.some(hit=>cardKey(hit)===run.pendingCard.receiptKey)&&!run[saveFlag])throw new Error('通知カードの変換完了を確認してからもう一度押してください');
+ if(confirm&&hits.length&&!page.confirm('今回貼ったURLカード '+hits.length+'件だけ削除します。元のカード・本文・画像は残します。実行しますか？'))return null;
+ const removedCards=hits.length?deleteVerifiedNotificationCardHits(view,hits):0;
+ if(save){
+  writeRun({...run,[saveFlag]:true,updatedAt:Date.now()});
+  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+  let saved;try{saved=await saveOnce('今回のURLカードだけ一括削除｜下書き保存を確認中…')}catch(error){
+   return{removedCards,missing,savePending:true};
+  }
+  if(saved!==true&&saved?.confirmed!==true)return{removedCards,missing,savePending:true};
+ }
+ writeRun({...readRun()||run,cardKeys:[],pendingCard:null,cardAnchorPos:null,cardsCompletedAt:null,stage:append?'images_ready':'prepared',awaitingInsertion:!append,[saveFlag]:false,paused:false,pauseStage:null,updatedAt:Date.now()});
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+ return{removedCards,missing};
+}
 async function deleteNotificationCards({confirm=true,save=true}={}){
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
  const run=readRun();if(!run)throw new Error('この下書きのカード記録を確認できません。本文は保持しています');
+ if(run.pendingTagAppend)return 0;
  if(run.articleKey&&run.articleKey!==editorArticleKey())throw new Error('保存記録が別の記事のため削除を停止しました');
+ if(run.magazineCardsOnly||run.appendTagBatch){
+  if(run.articleKey!==editorArticleKey())throw new Error('この記事の保存記録を確認できません');
+  return deleteMagazineBatchCards(view,run,{confirm,save});
+ }
  const tracked=resolveOwnedCardHits(view),anchor=run.cardAnchorPos;
  const hasAnchor=anchor!=null&&anchor!==''&&Number.isFinite(Number(anchor))&&Number(anchor)>=0&&Number(anchor)<=view.state.doc.content.size;
  const scoped=hasAnchor?run:tracked.length?{...run,cardAnchorPos:Math.min(...tracked.map(hit=>hit.pos))}:null;
@@ -3893,9 +4089,13 @@ page.__MUMEI_PROFILE_CARD_PREPARED_AFTER_DELETION__=preparedAfterDeletion;
 async function deleteAllGenerated({save=true}={}){
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
  const run=readRun(),empty={removedCards:0,removedImages:0,removedHeadings:0,removedActivities:0,removedDividers:0};
- if(!run)return empty;
+ if(!run||run.pendingTagAppend)return empty;
  if(!run.articleKey||run.articleKey!==editorArticleKey())throw new Error('この記事の作成記録を確認できないため全削除を停止しました。本文と途中記録は保持しています');
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+ if(run.magazineCardsOnly){
+  const result=await deleteMagazineBatchCards(view,run,{confirm:false,save});
+  return {...empty,...result,prepared:!result?.savePending,magazineCardsOnly:true};
+ }
  const presentationHits=presentationActivityHits(view,run),presentationPositions=presentationHits?new Set(presentationHits.map(hit=>hit.pos)):null;
  const records=Array.isArray(run.items)?run.items:[],allImages=imageNodes(view),baseline=generatedContentBaselinePositions(view,run);
  const imageBaseline=Array.isArray(run.imageBaselineRecords)?run.imageBaselineRecords:[];
@@ -4008,11 +4208,25 @@ function skipPendingCoreCreator(view,rows,index,insertPos,reason){
   imageAnchorPos:shift(run.imageAnchorPos),cardAnchorPos:shift(run.cardAnchorPos),updatedAt:Date.now()});
  return{rows:filtered,pos};
 }
-async function createImageList({special=false,workmom=false,parenting=false,freshAnchor=null,resumeMagazineMembers=false,clickedAnchor=null,recoverSelection=null,useListedArticles=false}={}){
+function canBeginTagBatch(run){
+ if(!run)return true;
+ if(run.pendingCard||run.pendingImage||run.pendingCoreDivider||qualityHoldApplies(run))return false;
+ if(run.awaitingInsertion||['images_ready','complete'].includes(run.stage))return true;
+ // A last upload/conversion may have been recorded immediately before a
+ // reload, without the final stage or save confirmation being written.
+ const rows=Array.isArray(run.rows)?run.rows:null;
+ if(!rows?.length)return false;
+ const records=run.stage==='images_building'?run.items:run.stage==='cards_building'?run.cardKeys:null;
+ if(!Array.isArray(records))return false;
+ const completed=new Set(records.map(record=>norm(record.url)));
+ return rows.every(row=>(run.stage==='cards_building'&&row.profileOnly)||completed.has(norm(row.url)));
+}
+async function createImageList({special=false,workmom=false,parenting=false,freshAnchor=null,resumeMagazineMembers=false,clickedAnchor=null,recoverSelection=null,useListedArticles=false,resumeTagScan=null}={}){
  if(actionBlocked())return;busy=true;stopRequested=false;imagePauseRequested=false;imageRunActive=true;update();
  try{
-  const input=inputValues();
-  if(recoverSelection)Object.assign(input,{sources:recoverSelection.sources,mode:recoverSelection.mode,count:recoverSelection.count,choice:recoverSelection.choice,...(recoverSelection.choice==='listed-tags'||recoverSelection.explicitListedArticles?{listedMode:true,listedSelectionSource:exactArticleInputKey(recoverSelection.sources)}:{})});
+  const input=inputValues(),startArticleKey=editorArticleKey();
+  const savedSelection=resumeTagScan||recoverSelection;
+  if(savedSelection)Object.assign(input,{sources:savedSelection.sources,mode:savedSelection.mode,count:savedSelection.count,choice:savedSelection.choice,...(savedSelection.choice==='listed-tags'||savedSelection.explicitListedArticles?{listedMode:true,listedSelectionSource:exactArticleInputKey(savedSelection.sources)}:{})});
   const textInsertion=!special&&!workmom&&!parenting;
   const route=textInsertion?resolveArticleSelection(input.sources,input,useListedArticles||input.choice==='magazine-articles'):{};
   const {listedTags,explicitMagazine,magazineCreator,magazineChoice}=route;
@@ -4021,11 +4235,24 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
   if(magazineArticles||listedTags)setStatus(magazineArticles?'マガジンの掲載記事を確認中…':'ハッシュタグの掲載記事を確認中…');
   const currentView=textInsertion?findView():null;
   const selectedAnchor=currentView?(clickedAnchor?.view===currentView?clickedAnchor:{view:currentView,doc:currentView.state.doc,pos:cardAnchorFromSelection(currentView,true)}):null;
-  const previousRun=readRun(),heldPlan=previousRun?.awaitingInsertion?null:await qualityMigrateKnown(previousRun);
+  if(listedTags)await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
+  const previousRun=readRun();
+  if(listedTags){
+   if(!startArticleKey||startArticleKey!==editorArticleKey()||previousRun?.articleKey&&previousRun.articleKey!==startArticleKey)throw new Error('追加先の記事を確認できません。編集画面を開き直してください');
+   if(previousRun?.appendCardDeleteSavePending)throw new Error('前回のカード削除の保存が途中です。「今回のカードだけ一括削除」で保存を確認してください');
+   if(previousRun?.clearSavePending)throw new Error('前回の削除の保存が途中です。「再開」で保存状態を確認してください');
+   if(previousRun?.pendingCard?.sessionId===CARD_SESSION||previousRun?.pendingImage?.sessionId===CARD_SESSION)throw new Error('前回の変換結果を確認中です。下書き保存後、編集画面を開き直してください');
+   if(!previousRun?.pendingTagAppend&&!canBeginTagBatch(previousRun)){
+    let uploading=false;currentView?.state.doc.descendants(node=>{if(node.type?.name==='imageUploading')uploading=true});
+    if(uploading)throw new Error('前回の画像をアップロード中です。完了後に追加できます');
+    if(!page.confirm('前回の貼り付けには続きがあります。本文にある画像・カードを残して、今回の追加を始めますか？')){setStatus('前回の続きは「再開」から貼れます');return}
+   }
+  }
+  const heldPlan=listedTags||previousRun?.awaitingInsertion?null:await qualityMigrateKnown(previousRun);
   if(qualityHoldApplies(heldPlan))await qualityBlock(heldPlan.qualityHold);
   const diagnosed=heldPlan?.rows?.find(row=>qualityRecordedReasons(row).length);
   if(diagnosed)await qualityGate(diagnosed,null,'images');
-  const recoveredPresentation=recoverSelection?.rows?.find(row=>row.presentation)?.presentation;
+  const recoveredPresentation=resumeTagScan?.presentation||recoverSelection?.rows?.find(row=>row.presentation)?.presentation;
   contentOptions=recoveredPresentation?{size:recoveredPresentation.size,content:recoveredPresentation.content}:contentApi?.readOptions?.()||contentOptions;
   await keepAwake();
   if(textInsertion&&!magazineChoice&&!magazineMembers){
@@ -4034,6 +4261,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
   }
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  if(listedTags&&(editorArticleKey()!==startArticleKey||view!==currentView))throw new Error('編集画面が変わりました。追加先の位置をタップして①を押してください');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
 
   // ①画像一覧も、開始ボタンを押した瞬間の本文タップ位置を固定して使う。
@@ -4050,8 +4278,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    else writeScan({...savedScan,version:1,anchorPos:imageInsertPos,active:true,updatedAt:Date.now()})
   }
 
-  const leftover=trackedContentCount(view);
-  if(leftover.images||leftover.cards||leftover.headings||leftover.activities){
+  if(!listedTags&&Object.values(trackedContentCount(view)).some(Boolean)){
    throw new Error('このページに今回作成分が残っています。「今回分を全削除」か「再開」を選んでください')
   }
 
@@ -4073,11 +4300,29 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    const existingKeys=new Set(imageNodes(view).map(hit=>noteKey(hit.node.attrs?.link)).filter(Boolean));
    magazine=await buildMagazineMemberRows(imageInsertPos,resumeMagazineMembers,existingKeys);
   }
+  const tagScanKey=MIXED_TAG_SCAN_PREFIX+(editorArticleKey()||'unknown');
+  if(listedTags){
+   if(!resumeTagScan)writeJSONKey(tagScanKey,null);
+   if(previousRun&&!previousRun.pendingTagAppend){
+    // Keep the previous run's receipts until there is a new validated plan.
+    // During an interrupted/empty scan, ② and bulk deletion have no new rows.
+    writeRun({...previousRun,pendingTagAppend:true});
+    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+   }
+  }
   let rows=magazine?.rows??await buildRows(effective,special,workmom,parenting);
   const selection=magazine?.selection??(textInsertion?page.__MUMEI_PROFILE_CARD_SOURCE_SELECTION__||null:null);
-  if(!rows.length)throw new Error('貼り付け対象が0件です'+sourceSelectionNotice({sourceSelection:selection}));
+  if(listedTags&&(stopRequested||editorArticleKey()!==startArticleKey||findView()!==view))throw new Error('取得を中断しました。今回分はまだ貼り付けていません');
+  if(!rows.length){
+   if(listedTags){
+    writeJSONKey(tagScanKey,null);
+    setStatus('新しく追加できる記事は0件です'+sourceSelectionNotice({sourceSelection:selection}));
+    return;
+   }
+   throw new Error('貼り付け対象が0件です'+sourceSelectionNotice({sourceSelection:selection}));
+  }
   if(selectedAnchor&&(selectedAnchor.view!==view||!view.state.doc.eq(selectedAnchor.doc)))throw new Error('読み込み中に本文が変わりました。挿入位置をタップして①を押してください');
-  if(textInsertion&&!magazineMembers&&!magazineArticles)writeJSONKey(MIXED_TAG_SCAN_PREFIX+(editorArticleKey()||'unknown'),null);
+  if(!listedTags&&textInsertion&&!magazineMembers&&!magazineArticles)writeJSONKey(tagScanKey,null);
   if(special)clearScan();
 
   // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
@@ -4086,7 +4331,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
   const shortage=requestedCount!==null&&acceptedPeople<requestedCount?{requested:requestedCount,accepted:acceptedPeople}:null;
   writeRun({
    version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
-   contentBaselineNodes:originalTextBlocks(view),
+   ...(listedTags?{appendTagBatch:true}:{}),contentBaselineNodes:originalTextBlocks(view),
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
    imageBaselineRecords:imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})),
    createdAt:Date.now(),stage:'images_building',coreImageRun:true,paused:false,pauseStage:null,special:Boolean(special),workmom:Boolean(workmom),parenting:Boolean(parenting),
@@ -4096,6 +4341,10 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    ...(effective.explicitListedArticles?{explicitListedArticles:true}:{}),sourceSelection:selection
   });
 
+  if(listedTags){
+   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+   writeJSONKey(tagScanKey,null);
+  }
   if(magazineMembers||magazineArticles)writeMagazineMemberScan(null);
   setStatus(explicitMagazine||listedTags?(explicitMagazine?'マガジン':'ハッシュタグ')+'掲載記事 '+acceptedPeople+'件｜選択した紹介形式で貼り付け中':magazineMembers?'共同運営メンバー '+acceptedPeople+'人｜極薄を貼り付け中':magazineArticles?'マガジン掲載記事 '+acceptedPeople+'件｜プロフィールとサムネを貼り付け中':(parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄50種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成'+(shortage?'｜注意：採用'+acceptedPeople+'/'+requestedCount+'人・取得条件/除外を確認':''));
   for(let i=0;i<rows.length;i++){
@@ -4172,7 +4421,7 @@ async function createImageList({special=false,workmom=false,parenting=false,fres
    setStatus('①画像一覧 '+rows.length+'件｜'+savedLabel+(completedShortage?'｜指定'+completedShortage.requested+'人に対し貼付'+completedShortage.accepted+'人':'')+'｜カードを置く位置を本文でタップ →「②通知カード」'+sourceSelectionNotice())
   }
  }catch(e){
-  if(e?.code==='MAGAZINE_MEMBERS_PAUSED')setStatus('一時停止中｜'+e.message);
+  if(e?.code==='MAGAZINE_MEMBERS_PAUSED'||e?.code==='TAG_FEED_PAUSED')setStatus('一時停止中｜'+e.message);
   else if(e?.code==='PAUSED')setStatus('一時停止中｜タグ混合取得を記録。「再開」で続けられます');
   else setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true);
  }finally{imageRunActive=false;await releaseAwake();busy=false;update()}
@@ -4408,18 +4657,82 @@ async function saveCompletedCards(total,label){
   const current=readRun()||run;
   writeRun({...current,stage:'complete',draftSaveState:'confirmed',updatedAt:Date.now()});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
-  setStatus('完了 ✅ 画像一覧 '+run.rows.length+'件 → 通知カード '+total+'件');
+  setStatus(run.magazineCardsOnly?'完了 ✅ 掲載者のURLカード '+total+'件（1人1件）'+(current.cardKeys?.some(card=>card.proof==='view-only-v1')?'｜作成元未確認のカードは一括削除不可':'')+(run.magazineSkipped?'｜非公開・対象外 '+run.magazineSkipped+'記事':''):'完了 ✅ 画像一覧 '+run.rows.length+'件 → 通知カード '+total+'件');
  }else setStatus('通知カード '+total+'件は貼付済み｜保存は未確認。「再開」で保存を確認できます');
  return saved;
 }
-async function createCardsAtTap({resume=false}={}){
- if(actionBlocked())return;busy=true;stopRequested=false;cardPauseRequested=false;cardRunActive=true;update();
+async function collectMagazineCards(source,fetchPage,status=()=>{}){
+ const key=magazineKey(source),seenKeys=new Set(),seenPeople=new Set(),rows=[];
+ if(!key)throw new Error('マガジンURLを1つ入力してください');
+ let total=null,skipped=0;
+ for(let n=1;n<=100;n++){
+  if(stopRequested)throw new Error('手動停止');
+  status('マガジンの掲載記事を確認中｜'+n+'ページ');
+  const data=await fetchPage(key,n);
+  if(stopRequested)throw new Error('手動停止');
+  if(!Array.isArray(data?.notes)||String(data.key)!==key)throw new Error('マガジンの掲載一覧を確認できません');
+  const expected=Number(data.note_count);
+  if(!Number.isSafeInteger(expected)||expected<0||total!==null&&expected!==total)throw new Error('マガジンの件数が変化しました。カードを貼らずに停止しました');
+  total=expected;
+  for(const raw of data.notes){
+   const note=raw?.note||raw,handle=String(note?.user?.urlname||note?.author?.urlname||'').trim();
+   const noteId=String(note?.key||'').trim().toLowerCase();
+   if(!/^n[a-f0-9]{12}$/.test(noteId)||!/^[-_.a-z0-9]+$/i.test(handle)||seenKeys.has(noteId))throw new Error('掲載記事を一意に確認できません。カードは貼っていません');
+   seenKeys.add(noteId);
+   const account=handle.toLowerCase();
+   if(note.status!=='published'){skipped++;continue}
+   if(seenPeople.has(account))continue;
+   const url='https://note.com/'+handle+'/n/'+noteId;
+   const row={key:noteId,urlname:handle,url,creator:String(note.user?.nickname||note.author?.nickname||handle).trim()||handle,actorUrl:'https://note.com/'+handle,title:String(note.name||note.title||'').trim()};
+   if(excludedCreator(row)){skipped++;continue}
+   seenPeople.add(account);rows.push({...row,index:rows.length+1});
+  }
+  if(data.next_page===null&&data.last_page===true){
+   if(seenKeys.size!==total)throw new Error('掲載記事の取得件数が一致しません。カードは貼っていません');
+   if(!rows.length)throw new Error('カードを作成できる公開記事がありません');
+   return {rows,skipped};
+  }
+  if(Number(data.next_page)!==n+1||!data.notes.length||seenKeys.size>=total)throw new Error('掲載記事の続きが確認できません。カードは貼っていません');
+ }
+ throw new Error('掲載記事の上限に達しました。カードは貼っていません');
+}
+async function createCardsAtTap({resume=false,magazineSource=null,clickedAnchor=null}={}){
+ if(actionBlocked())return;magazineResumeWork=null;busy=true;stopRequested=false;cardPauseRequested=false;cardRunActive=true;update();
  await keepAwake();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
-  const anchors={tappedAnchor:notificationCardAnchorFromSelection(view)};
+  const anchors={tappedAnchor:clickedAnchor?.view===view&&clickedAnchor.doc===view.state.doc?clickedAnchor.pos:notificationCardAnchorFromSelection(view)};
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
   if(stopRequested)throw new Error('手動停止');
+  if(magazineSource!==null){
+   const articleKey=editorArticleKey(),previous=readRun(),key=magazineKey(magazineSource);
+   if(!articleKey)throw new Error('下書きを保存して編集画面を開き直してください');
+   if(previous?.articleKey&&previous.articleKey!==articleKey)throw new Error('別の記事の保存記録です');
+   const same=previous?.magazineCardsOnly&&magazineKey(previous.sources)===key;
+   if(previous?.magazineCardsOnly&&previous.clearSavePending)throw new Error('削除の下書き保存を確認し、「今回のカードだけ一括削除」を押してから貼り付けてください');
+   if((previous?.pendingCard&&(!same||previous.awaitingInsertion))||previous?.clearSavePending)throw new Error('現在のカードまたは削除の結果を先に確認してください');
+   if(!same||previous.awaitingInsertion){
+    if((previous&&!previous.awaitingInsertion)||Object.values(trackedContentCount(view)).some(Boolean))throw new Error('作成中または作成済みの内容があります。再開するか「今回分を全削除」を使ってください');
+    const priorDoc=view.state.doc;
+    const {rows,skipped}=await collectMagazineCards(magazineSource,async(key,n)=>(await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?page='+n+'&limit=100'))?.data,setStatus);
+    if(stopRequested||view!==findView()||articleKey!==editorArticleKey()||view.state.doc!==priorDoc)throw new Error('編集画面が変わったためカードを貼らずに停止しました');
+    const existing=embedNodes(view);
+    const existingArticleKeys=new Set(existing.map(hit=>{
+     const raw=cardUrl(hit);return noteKey(raw)||String(raw||'').match(/^https:\/\/note\.com\/embed\/notes\/(n[a-f0-9]{12})(?:[/?#]|$)/i)?.[1];
+    }).filter(Boolean));
+    if(rows.some(row=>existingArticleKeys.has(row.key)))throw new Error('この下書きには同じ記事のカードがすでにあります。既存のカードは保持しています');
+    const now=Date.now();
+    writeRun({version:VERSION,articleKey,items:[],cardKeys:[],sectionHeadings:[],rows,
+     contentBaselineNodes:originalTextBlocks(view),cardBaselineKeys:existing.map(cardKey).filter(Boolean),
+     cardBaselineNodes:existing.map(hit=>({key:cardKey(hit),json:hit.node.toJSON?.()})),
+     imageBaselineRecords:imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})),
+     magazineCardsOnly:true,magazineCardProof:1,magazineSkipped:skipped,sources:magazineSource,mode:'all',count:rows.length,createdAt:now,updatedAt:now,
+     stage:'images_ready',cardAnchorPos:anchors.tappedAnchor,paused:false,pauseStage:null});
+    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+    resume=true;
+   }
+  }
+  if(readRun()?.pendingTagAppend){setStatus('今回分の画像はまだ0件です');return}
   const savedPlan=await qualityMigrateKnown(readRun());
   if(qualityHoldApplies(savedPlan))await qualityBlock(savedPlan.qualityHold);
   if(savedPlan?.articleKey===editorArticleKey()&&!savedPlan.gallery126&&Array.isArray(savedPlan.rows)){
@@ -4431,6 +4744,12 @@ async function createCardsAtTap({resume=false}={}){
   const tappedAnchor=anchors.tappedAnchor;
   if(stopRequested)throw new Error('手動停止');
   let run=readRun(),rows=Array.isArray(run?.rows)?run.rows.filter(row=>!row.profileOnly):[];
+  if(run?.appendTagBatch){
+   if(run.appendCardDeleteSavePending)throw new Error('通知カード削除の保存を確認するため、もう一度「今回のカードだけ一括削除」を押してください');
+   const inserted=new Set(resolveOwnedImageHits(view).map(hit=>norm(hit.node.attrs?.link)));
+   rows=rows.filter(row=>inserted.has(norm(row.url)));
+   if(!rows.length)throw new Error('今回貼り付けた紹介画像がまだありません。先に①で画像を貼ってください');
+  }
   const preservedCards=[...resolveOwnedCardHits(view),...(rows.some(excludedCreator)?generatedCardHits(view,run,run.rows):[])];
   rows=rows.filter(row=>!excludedCreator(row)||preservedCards.some(hit=>genuineCard(hit,row.url)));
   if(!run||!rows.length)throw new Error('先に紹介する記事を読み込んでください');
@@ -4510,7 +4829,11 @@ async function bulkDelete(){
  if(actionBlocked())return;busy=true;stopRequested=true;update();
  try{
   const removed=await deleteNotificationCards({confirm:true,save:true});
-  if(removed!==null)setStatus(removed?'正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持':'この本文に削除対象の通知カードはありません｜画像・プロフィールは保持')
+  if(removed&&typeof removed==='object'){
+   const detail=removed.missing?'｜すでに見当たらない '+removed.missing+'件':'';
+   if(removed.savePending)setStatus('今回のURLカード削除｜noteの下書き保存が未確認です。確認後、必要ならもう一度「今回のカードだけ一括削除」'+detail,true);
+   else setStatus((removed.removedCards?'今回のURLカード '+removed.removedCards+'件を一括削除・下書き保存済み':'削除対象のURLカードはありません')+'｜元のカード・本文・画像は保持'+detail);
+  }else if(removed!==null)setStatus(removed?'正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持':'この本文に削除対象の通知カードはありません｜画像・プロフィールは保持')
  }catch(e){setStatus('通知カード一括削除停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
@@ -4579,11 +4902,12 @@ async function startFreshFromScratch(){
 
 async function resetAll(){
  if(actionBlocked())return;
- if(!page.confirm('今回作った紹介画像・紹介文・通知カード・区切り線を削除し、貼り付け位置をリセットします。実行しますか？'))return;
+ if(!page.confirm(readRun()?.magazineCardsOnly?'今回貼ったURLカードだけを削除します。元のカード・本文・画像は残します。実行しますか？':'今回作った紹介画像・紹介文・通知カード・区切り線を削除し、貼り付け位置をリセットします。実行しますか？'))return;
  busy=true;stopRequested=true;update();
  try{
   const result=await deleteAllGenerated();
   if(result.savePending)setStatus('削除を本文に反映しました｜noteの下書き保存を確認してください',true);
+  else if(result.magazineCardsOnly)setStatus('今回のURLカード '+result.removedCards+'件を整理｜元のカード・本文・画像は保持');
   else{
    const detail='画像 '+result.removedImages+'・通知 '+result.removedCards+'・紹介文 '+result.removedActivities+'・見出し '+result.removedHeadings+'・区切り線 '+result.removedDividers;
    const resumeHint=result.refreshTagScan?'｜旧版のタグ結果を再照合します。位置をタップして「再開」':result.prepared?'｜取得済み。位置をタップして「再開」':'';
@@ -4617,6 +4941,8 @@ page.__MUMEI_PROFILE_CARD_RESET_RECORDS__=resetRecordsOnly;
 function stop(){stopRequested=true;cardWaitWake?.();abortActiveRequests();const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});window.dispatchEvent(new Event('mumei-profile-card-stop'));setStatus('停止しました｜途中保存は保持。自動再開もしません')}
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
+ const deleteControl=p.querySelector?.('[data-a="delete"]');
+ if(deleteControl){const label=readRun()?.magazineCardsOnly?'今回のカードだけ一括削除':'通知カードだけ削除（画像は残す）';if(deleteControl.textContent!==label)deleteControl.textContent=label;}
  p.querySelectorAll('textarea,input,select,button').forEach(x=>{
   if(x.dataset.a==='pause'||x.dataset.galleryAction==='pause'){
    x.disabled=false;
@@ -4643,9 +4969,11 @@ function applyMagazineMode(){
  panel.classList.toggle('explicit-listing',explicit);
  const option=panel.querySelector('[data-article-selection="listed"]');
  if(option){option.hidden=!kind;option.classList.toggle('on',explicit);option.setAttribute('aria-pressed',String(explicit));}
- panel.querySelector('[data-a="images"]').textContent=members?'① 参加者を貼る':choice||explicit?'① 掲載記事を貼る':'① 画像を貼る';
+ panel.querySelector('[data-a="images"]').textContent=members?'① 参加者を貼る':route.listedTags?'① 未掲載の記事を追加':choice||explicit?'① 掲載記事を貼る':'① 画像を貼る';
  panel.querySelector('[data-a="magazine-articles"]').hidden=!members;
- panel.querySelector('[data-amount-hint]').textContent=members?'本人を除く'+SELECT_MAGAZINE_MEMBERS.length+'人｜最新1記事。最新がなければ固定':explicit?'掲載記事をそのまま使用｜紹介内容は別に選択':choice?'掲載順に全記事｜同じ著者の別記事も対象｜プロフィール付き':'指定件数＋最後に「実績の算数」1件（件数外）';
+ const cardsOnly=panel.querySelector('[data-a="magazine-cards-only"]');
+ if(cardsOnly)cardsOnly.hidden=kind!=='magazine'||parseUnifiedSources(sources).length!==1;
+ panel.querySelector('[data-amount-hint]').textContent=members?'本人を除く'+SELECT_MAGAZINE_MEMBERS.length+'人｜最新1記事。最新がなければ固定':route.listedTags?'掲載済みの記事はスキップします。②で今回追加した分のカードを貼れます。':explicit?'掲載記事をそのまま使用｜紹介内容は別に選択':choice?'掲載順に全記事｜同じ著者の別記事も対象｜プロフィール付き':'指定件数＋最後に「実績の算数」1件（件数外）';
 }
 function applySpecialAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-special-mode]'),num=p?.querySelector('[data-special-count]');
@@ -4817,6 +5145,7 @@ function mount(){
   <div class="hint" data-amount-hint>指定件数＋最後に「実績の算数」1件（件数外）</div>
 
   <div class="phase"><button data-a="images">① 画像を貼る</button><button data-a="cards">② 通知カード</button></div><button data-a="magazine-articles" hidden>マガジンの掲載記事を貼る</button><div class="tools"><button type="button" data-a="delete" style="grid-column:1/-1">通知カードだけ削除（画像は残す）</button></div>
+  <button type="button" data-a="magazine-cards-only" hidden>カードだけ貼る（極薄なし・1人1件）</button>
   <div class="phase"><button data-a="resume">再開</button><button type="button" data-a="pause">一時停止</button></div>
 
   <details data-like300>
@@ -4891,6 +5220,19 @@ function mount(){
    void createImageList({clickedAnchor:anchor,useListedArticles:button.dataset.a==='magazine-articles'});
   });
  }
+ const magazineCardsOnly=p.querySelector('[data-a="magazine-cards-only"]');
+ let magazineCardsAnchor=null;
+ magazineCardsOnly.addEventListener('pointerdown',()=>{
+  const view=findView();magazineCardsAnchor=view?{view,doc:view.state.doc,pos:notificationCardAnchorFromSelection(view)}:null;
+ });
+ magazineCardsOnly.addEventListener('pointercancel',()=>{magazineCardsAnchor=null});
+ magazineCardsOnly.addEventListener('click',e=>{
+  e.preventDefault();
+  const anchor=e.detail>0?magazineCardsAnchor:null;magazineCardsAnchor=null;
+  const sources=parseUnifiedSources(p.querySelector('[data-sources]')?.value);
+  if(sources.length!==1||sources[0].type!=='mag'){setStatus('マガジンURLを1つ入力してください',true);return}
+  void createCardsAtTap({magazineSource:sources[0].value,clickedAnchor:anchor});
+ });
  p.querySelector('[data-a="special-images"]')?.addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
  p.querySelector('[data-a="like300-images"]').addEventListener('click',e=>{e.preventDefault();window.dispatchEvent(new Event('mumei-profile-card-start'))});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
@@ -5189,7 +5531,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.62';
+const VERSION='2.9.67';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
@@ -6238,6 +6580,11 @@ async function ensureCardsRunReady(view,anchors=null){
  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
  let run=readRun();
  if(!run)return null;
+ if(run.magazineCardsOnly){
+  if(run.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');
+  if(run.awaitingInsertion||run.clearSavePending)throw new Error('本文の位置を選び「再開」でURLカードを準備してください');
+  return run;
+ }
  if(run.articleKey===editorArticleKey()&&!run.gallery126&&Array.isArray(run.rows)){
   const selected=excludePendingCreatorRows(run.rows,run);
   if(selected!==run.rows){run={...run,rows:selected,count:selected.length-1,updatedAt:Date.now()};writeRun(run);await flushRunBackup();}
@@ -7192,10 +7539,13 @@ async function resumeFixed300(){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
  try{
   await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
-  const view=findView();if(view)await repairTrackedRawFormulas(view);
+  if(page.__MUMEI_PROFILE_CARD_RESUME_MIXED_TAGS__?.({appendOnly:true}))return;
+  if(readRun()?.pendingTagAppend){setStatus('今回追加した画像は0件です。新着の取得は①から始められます');return}
+  const view=findView();if(view&&!readRun()?.magazineCardsOnly)await repairTrackedRawFormulas(view);
   const run=readRun();
   if(run?.purchasedReview){setStatus('この保存分は購入記事紹介の専用版で再開してください',true);return;}
   const resumeCards=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;
+  if(run?.magazineCardsOnly&&typeof resumeCards==='function')return resumeCards({resume:!run.awaitingInsertion,magazineSource:run.sources});
   if(hasCardProgress(run)&&!run.rows.some(summaryNeedsRefresh)&&!galleryNeedsParticipantUpgrade(run)&&typeof resumeCards==='function')return resumeCards({resume:true});
   if(page.__MUMEI_PROFILE_CARD_RESUME_MAGAZINE_MEMBERS__?.())return;
   if(!run?.gallery126&&run?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
