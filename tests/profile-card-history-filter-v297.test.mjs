@@ -17,7 +17,10 @@ function editor(){
  const dom=new JSDOM('<section id="mumei-profile-card-paster-v1"><div class="body"><select data-mode><option value="number">number</option><option value="all">all</option></select><input data-count value="200"><details data-like300><div class="special-actions"></div></details></div></section>',{url:'https://editor.note.com/notes/n123456789abc/edit',runScripts:'outside-only'});
  const w=dom.window,panel=w.document.querySelector('section'),detail=w.document.querySelector('details');
  const start=distribution.indexOf("const HISTORY_FILTER_PREF="),end=distribution.indexOf('function mediaUrl(',start);
- let code=distribution.slice(start,end);
+ const identityStart=distribution.lastIndexOf('function summaryIdentity(',start);
+ const identityEnd=distribution.indexOf('function summaryMismatch(',identityStart);
+ assert.ok(identityStart>=0&&identityEnd>identityStart&&identityEnd<start);
+ let code=distribution.slice(identityStart,identityEnd)+distribution.slice(start,end);
  code=code.slice(0,code.indexOf("window.addEventListener('message'"));
  w.unsafeWindow=w;w.Date=class extends Date{static now(){return Date.parse('2026-11-08T15:00:01Z')}};
  w.eval(`const PANEL='mumei-profile-card-paster-v1',HISTORY_CANDIDATE_CAP=1500;let exportWaiter=null;const notifyFixedState=()=>{},setStatus=()=>{};function bindPanelAction(button,key,fn){button.addEventListener(key.split(':')[0],fn)};${code};window.api={historyToday,selectedHistoryFilter,historyOptions,checkpointHistoryOptions,historyFilterContains,patchHistoryFilterPanel,prepareLikesHistoryExport};`);
@@ -45,7 +48,7 @@ test('single day, inclusive range, selected article and invalid values do not fa
   r.field('period').value='range';r.field('to').value='2026-10-05';r.field('articles').value='selected';r.field('article').value='https://note.com/ss_yr/n/n123456789abc?x=1';
   assert.deepEqual(plain(r.api.selectedHistoryFilter()),{...filter,fromDate:'2026-10-03',toDate:'2026-10-05',articleKey:'n123456789abc'});
   r.field('to').value='2026-10-01';assert.throws(()=>r.api.historyOptions(),/日付/);
-  r.field('to').value='2026-10-05';r.field('article').value='https://example.com/n/n123456789abc';assert.throws(()=>r.api.historyOptions(),/記事URL/);
+  r.field('to').value='2026-10-05';r.field('article').value='https://example.com/n/n123456789abc';assert.throws(()=>r.api.historyOptions(),/記事のURL/);
   r.field('article').value='n123456789abc';r.field('period').value='all';assert.equal(r.api.historyOptions().mode,'number');
  }finally{r.dom.window.close()}
 });
