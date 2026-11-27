@@ -423,16 +423,56 @@ test('ページを再表示しても最後のエラーと履歴を残し、自�
 
 const officialMetrics=[['IMPRESSION','インプレッション'],['PAGE_VIEW','ページビュー'],['LIKE','スキ'],['COMMENT','コメント'],['SALES','売上']];
 const officialMetricSelect=hidden=>`<div>${hidden?'<div aria-hidden="true">':''}<select id="metric">${officialMetrics.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>${hidden?'</div><button aria-label="グラフに表示する指標" aria-haspopup="listbox">インプレッション</button>':''}</div>`;
-for(const hidden of [false,true])test('公式GraphQLの5指標を自動で読み、日別PVの0も保存する：native hidden='+hidden,async t=>{
+for(const hidden of [false,true])test('公式GraphQLの5指標を自動で読み、日別PVの0も保存する：picker hidden='+hidden,async t=>{
  const changed=[],network=[];
  const h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+officialMetricSelect(hidden),{before:w=>{
   const original=w.fetch;w.fetch=async(url,init)=>{if(!String(url).includes('graphql.note.com'))return original(url);const request=JSON.parse(init.body);network.push(request);return Response.json({data:{dashboardMetricChart:{granularity:'DAY',points:[{label:'9/20',startDate:'2026-09-20',endDate:'2026-09-20',value:0},{label:'9/21',startDate:'2026-09-21',endDate:'2026-09-21',value:request.variables.metric==='PAGE_VIEW'?8:3}]},privateAccount:{secret:'must never be saved'}}})};
-  w.document.getElementById('metric').onchange=()=>{const metric=w.document.getElementById('metric').value;changed.push(metric);void w.fetch('https://graphql.note.com/graphql',{method:'POST',body:JSON.stringify({operationName:'Dashboard_MetricChartQuery',variables:{metric,unit:'LAST_28_DAYS',date:'2026-09-21T00:00:00+09:00'}})})};
+  const readMetric=metric=>{changed.push(metric);void w.fetch('https://graphql.note.com/graphql',{method:'POST',body:JSON.stringify({operationName:'Dashboard_MetricChartQuery',variables:{metric,unit:'LAST_28_DAYS',date:'2026-09-21T00:00:00+09:00'}})})};
+  if(!hidden)w.document.getElementById('metric').onchange=()=>readMetric(w.document.getElementById('metric').value);
+  else{
+   const trigger=w.document.querySelector('[role="combobox"],[aria-haspopup="listbox"]');
+   trigger.setAttribute('aria-controls','metric-options');
+   const open=()=>{trigger.setAttribute('aria-expanded','true');const list=w.document.createElement('div');list.id='metric-options';list.setAttribute('role','listbox');
+    for(const [metric,label] of officialMetrics){const option=w.document.createElement('div');option.setAttribute('role','option');option.textContent=label;
+     option.onclick=()=>{list.remove();trigger.setAttribute('aria-expanded','false');setTimeout(()=>{trigger.textContent=label;readMetric(metric)},40)};list.append(option)}
+    w.document.body.append(list);
+   };
+   trigger.onkeydown=e=>{if(e.key==='ArrowDown')open()}; // The visible picker opens on the keyboard path, not synthetic click.
+  }
  }});
  await saved(h);assert.deepEqual(changed,['PAGE_VIEW','LIKE','COMMENT','SALES','IMPRESSION']);assert.equal(network.length,5);
  assert.deepEqual(h.saves[0].metricSeries.map(r=>r.pageViews),[0,8]);assert.equal(h.saves[0].metricSeries[1].likes,3);assert.equal(h.saves[0].metricSeries[1].salesYen,3);
  assert.doesNotMatch(JSON.stringify(h.saves),/must never be saved/);assert.deepEqual(h.warnings,[]);
  h.w.document.getElementById('mumei-dash-run').click();for(let i=0;i<200&&(network.length<10||h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy')==='true');i++)await pause(20);assert.equal(h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy'),'false','非同期の読込・保存確認が完了してから画面を閉じる');assert.equal(network.length,10,'明示読み込みでは現在の5指標を再確認する');assert.equal(h.saves.length,1,'同じ値は重複保存しない');
+});
+test('グラフ指標が切り替わらなくても記事の続きと取得済みPVを保存し、完全同期とは表示しない',async t=>{
+ let more=0;
+ const h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+officialMetricSelect(true)+
+   '<script type="application/json">{"page_views":{"2026-09-20":0,"2026-09-21":8}}</script>'+
+   '<section>'+tabRows('先頭の記事')+'<button id="more">もっとみる</button></section>',{before:w=>{
+    w.document.getElementById('more').onclick=e=>{more++;w.document.querySelector('tbody').insertAdjacentHTML('beforeend','<tr><td>タイミー応募記事</td><td>8</td></tr>');e.target.remove()};
+   }});
+ await saved(h);await readFinished(h);
+ assert.equal(more,1);assert.ok(h.saves[0].articles.some(a=>a.title==='タイミー応募記事'));
+ assert.deepEqual(h.saves[0].metricSeries.map(r=>r.pageViews),[0,8]);
+ assert.equal(h.w.document.querySelector('.status').dataset.kind,'partial');
+ assert.match(h.w.document.querySelector('.status').textContent,/保存済み.*グラフの一部は未取得/);
+ assert.equal(h.diagnostics.at(-1)?.code,'METRIC_OPTION');
+});
+test('公式の選択操作が無視された場合も、別指標と記事データの保存まで進む',async t=>{
+ const clicks=[],h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+tabRows('応募記事')+officialMetricSelect(true),{before:w=>{
+  const trigger=w.document.querySelector('[aria-haspopup="listbox"]');trigger.setAttribute('aria-controls','active-metrics');trigger.onclick=()=>{
+   trigger.setAttribute('aria-expanded','true');const list=w.document.createElement('div');list.id='active-metrics';list.setAttribute('role','listbox');w.document.body.append(list);
+   for(const [metric,label] of officialMetrics){const option=w.document.createElement('div');option.setAttribute('role','option');option.textContent=label;list.append(option);
+    option.onclick=()=>{clicks.push(metric);list.remove();trigger.setAttribute('aria-expanded','false');if(metric!=='PAGE_VIEW')trigger.textContent=label};
+   }
+  };
+ }});
+ await saved(h);await readFinished(h);assert.ok(clicks.includes('LIKE'));
+ assert.equal(h.saves[0].articles[0].title,'応募記事');
+ assert.equal(h.saves[0].contentSections.unselectedChartMetrics.pageViews,'METRIC_NOT_SELECTED');
+ assert.equal(h.w.document.querySelector('.status').dataset.kind,'partial');
+ assert.match(h.w.document.querySelector('.status').textContent,/グラフの一部は未取得：ページビュー/);
 });
 test('キャッシュから表示され通信しない公式グラフも、実際のDAY pointsから自動取得する',async t=>{
  const h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+officialMetricSelect(false)+'<figure data-name="StackedBarChart"></figure>',{before:w=>{

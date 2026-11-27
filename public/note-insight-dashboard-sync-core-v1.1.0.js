@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.4';
+  const VERSION='1.7.8';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -272,7 +272,7 @@
     });
   }
   function metricTrigger(){return [...dashboardRoot().querySelectorAll('button,[role="combobox"]')].find(el=>readable(el)&&!el.disabled&&el.getAttribute('aria-disabled')!=='true'&&(/グラフに表示する指標/.test(el.getAttribute('aria-label')||'')||metricName(text(el.textContent))&&el.getAttribute('aria-haspopup')==='listbox'))}
-  function selectedChartMetric(){const select=metricSelect();if(select)return metricName(select.selectedOptions[0]?.textContent);const trigger=metricTrigger();return trigger?metricName(text(trigger.textContent)):''}
+  function selectedChartMetric(){const trigger=metricTrigger(),visible=trigger&&metricName(text(trigger.textContent));if(visible)return visible;const select=metricSelect();return select&&readable(select)?metricName(select.selectedOptions[0]?.textContent):''}
   function chartDomMetrics(aggregate=false){
     const rows=[],period=detectPeriod();
     for(const figure of (pageWindow().document.querySelector('main,[role="main"]')||pageWindow().document.body).querySelectorAll('figure[data-name="StackedBarChart"]')){
@@ -304,25 +304,31 @@
   }
   async function selectChartMetric(field,href,period){
     ensureRunning();if(!usableLease())viewLease={href,period,root:dashboardRouteRoot(),connection:connectionKey()};
-    const select=metricSelect();
-    if(select){
+    const selected=selectedChartMetric(),select=metricSelect(),trigger=metricTrigger();
+    if(selected===field)return true;
+    if(select&&readable(select)){
       const option=[...select.options].find(o=>metricName(o.textContent)===field);if(!option)return false;
       const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set;
       if(setter)setter.call(select,option.value);else select.value=option.value;
       select.dispatchEvent(new Event('change',{bubbles:true}));
     }else{
-      const trigger=metricTrigger();if(!trigger)return false;trigger.click();
+      if(!trigger)return false;
+      const popup=()=>{const id=trigger.getAttribute('aria-controls');return id?document.getElementById(id):[...document.querySelectorAll('[role="listbox"]')].find(readable)};
+      if(trigger.getAttribute('aria-expanded')!=='true')trigger.click();
+      if(trigger.getAttribute('aria-expanded')!=='true'&&!readable(popup()))trigger.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));
       let option=null;
-      for(let tick=0;tick<20;tick++){
-        ensureRunning();const id=trigger.getAttribute('aria-controls'),list=id?document.getElementById(id):document.querySelector('[role="listbox"]');
-        option=list&&[...list.querySelectorAll('[role="option"]')].find(el=>metricName(text(el.textContent))===field&&el.getAttribute('aria-disabled')!=='true'&&!el.closest('[hidden],[aria-hidden="true"]'));
+      for(let tick=0;tick<12;tick++){
+        ensureRunning();if(dashboardLocation()!==href||periodKey()!==period)throw new Error('表示期間または画面が変わりました [VIEW_CHANGED]');
+        const list=popup();option=readable(list)&&[...list.querySelectorAll('[role="option"]')].find(el=>readable(el)&&metricName(text(el.textContent))===field&&el.getAttribute('aria-disabled')!=='true');
         if(option)break;await sleep(100);
       }
-      if(!option)throw new Error('公式グラフの指標を選択できませんでした [METRIC_OPTION]');
+      if(!option){
+        const list=popup();if(!readable(list))throw new Error('[METRIC_PICKER_CLOSED]');
+        list.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return false;
+      }
       option.click();
     }
-    await waitForDashboard(href,period);
-    if(selectedChartMetric()!==field)throw new Error('公式グラフの指標が切り替わりませんでした [METRIC_NOT_SELECTED]');
+    await waitForDashboard(href,period,'',field);
     return true;
   }
   async function readDashboardCharts(href,period,read,checkpoint){
@@ -338,8 +344,19 @@
       // A fresh response can contain several metrics; avoid reopening charts already read in this run.
       if(CAPTURE.some(cap=>cap.at>=runStarted&&currentCapture(cap)&&((dailyMetrics(cap.payload,{field:cap.metric,period:checkpoint.period}).some(r=>r[field]!=null))||(chartMetrics(cap.payload,{field:cap.metric}).some(r=>r[field]!=null))))){graph.done.push(field);continue;}
       readStage='公式グラフ：'+chartMetricLabels[field];setStatus(readStage+'を読み込み中…');
-      if(!await selectChartMetric(field,href,period))continue;
-      collect();graph.done.push(field);saveCheckpoint(checkpoint);
+      try{
+        if(!await selectChartMetric(field,href,period))throw new Error('[METRIC_OPTION]');
+        collect();graph.done.push(field);
+      }catch(e){
+        const failure=String(e?.message||e).match(/\[(METRIC_OPTION|METRIC_NOT_SELECTED|METRIC_PICKER_CLOSED)\]/)?.[1];if(!failure)throw e;
+        const code=failure==='METRIC_PICKER_CLOSED'?'METRIC_OPTION':failure;
+        (graph.failed??={})[field]=code;
+        collect();
+        // A broken chart picker must not stop article pagination or prevent saving verified values.
+        // If opening the picker failed once, do not repeat a failing interaction for every metric.
+        if(failure==='METRIC_PICKER_CLOSED'){for(const remaining of fields)if(!graph.done.includes(remaining)&&remaining!==selectedChartMetric())graph.failed[remaining]??=code;break;}
+      }
+      saveCheckpoint(checkpoint);
     }
     graph.complete=true;saveCheckpoint(checkpoint);
   }
@@ -381,7 +398,7 @@
     // Live help text and response timestamps are not dashboard values.
     return JSON.stringify([tableArticles(),dailyTableMetrics(),chartDomMetrics(),detectTotals(),detectSummary(),detectTraffic(),panelControls().map(el=>[panelLabel(el),el.getAttribute('aria-expanded')])]);
   }
-  async function waitForDashboard(href,initialPeriod,expectedTab=''){
+  async function waitForDashboard(href,initialPeriod,expectedTab='',expectedMetric=''){
     let quiet=0,previous='';
     for(let tick=0;tick<100;tick++){
       ensureRunning();
@@ -390,7 +407,10 @@
       const signature=JSON.stringify([captureRevision,officialDataSignature()]);
       const active=activeContentLabel(),selectionReady=!expectedTab||!active||active===expectedTab;
       quiet=selectionReady&&!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
-      if(quiet>=(initialPeriod===null?6:2))return;
+      if(quiet>=(initialPeriod===null?6:2)){
+        if(!expectedMetric||selectedChartMetric()===expectedMetric)return;
+        if(quiet>=8)throw new Error('公式グラフの指標が切り替わりませんでした [METRIC_NOT_SELECTED]');
+      }
       if(tick%4===0)setStatus(`公式データを読込中…${pendingStats?' 通信 '+pendingStats+'件':''}`);
       await sleep(150);
     }
@@ -512,7 +532,7 @@
     return {action:'ingest',schemaVersion:5,connectorVersion:VERSION,noteId:paired,articles,
       totals:{impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals},
       trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,chartSeries:mined.chartSeries,summary:mined.summary,
-      contentSections:{article:{count:articles.length,scope:partial?'partial-read':'current-period-expanded'},openedPanels:checkpoint.progress.opened},
+      contentSections:{article:{count:articles.length,scope:partial?'partial-read':'current-period-expanded'},openedPanels:checkpoint.progress.opened,...(Object.keys(checkpoint.progress.graph?.failed||{}).length?{unselectedChartMetrics:checkpoint.progress.graph.failed}:{})},
       officialCollectedAt:detectCollected(),...checkpoint.period,pages:1};
   }
   async function finishCaptured(checkpoint){
@@ -571,9 +591,9 @@
         const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals};
         if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('表示中の公式データを取得できませんでした [NO_DATA]');
         const payload=payloadFor(checkpoint,paired);
-        const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
+        const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article,unselectedChartMetrics:payload.contentSections.unselectedChartMetrics}}]);
         const signatureHash=await checkpointHash({signature});
-        if(signature===lastSnapshotSignature||signatureHash===saveQueue.cached(saveKey+':last-saved')){setStatus(await saveQueue.recall('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',mined.metricSeries.some(r=>r.pageViews!==null)?'ok':'partial');return}
+        if(signature===lastSnapshotSignature||signatureHash===saveQueue.cached(saveKey+':last-saved')){const previous=await saveQueue.recall('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み';setStatus(previous,previous.startsWith('✓ 同期完了')?'ok':'partial');return}
         checkpoint.pendingSave={payload,readRevision:captureRevision,readSignature:officialDataSignature(),saved:null};saveQueue.stage(saveKey,checkpoint.pendingSave);saveCheckpoint(checkpoint);
         }
       }
@@ -583,19 +603,22 @@
       const queued=await saveQueue.flush(saveKey,pending.queueId);
       if(!queued)throw new Error('保存結果を確認できませんでした [SAVE_RESPONSE]');
       const {saved,verified}=queued;
-      saveQueue.remember(saveKey+':last-saved',await checkpointHash({signature:JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}])}));
+      saveQueue.remember(saveKey+':last-saved',await checkpointHash({signature:JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article,unselectedChartMetrics:payload.contentSections.unselectedChartMetrics}}])}));
       checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       saveQueue.remember('mumei-dashboard-last-sync',String(Date.now()));
       const longPeriod=payload.periodStart&&payload.periodEnd&&Date.parse(payload.periodEnd)-Date.parse(payload.periodStart)>30*86400000;
       const missingDaily=longPeriod?'選択期間が32日以上のため、公式グラフは週・月単位です。期間合計と記事別は保存済みですが、今回の日別PVはありません':'自動取得で日別値を確認できませんでした。日別の推移・曜日分析には今回の値を使えません';
       const graphSaved=payload.chartSeries?.some(r=>r.pageViews!=null),complete=count||graphSaved;
-      const message=complete?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・${count?'日別PV '+count+'日':'全期間グラフ '+chartCount+'点'}`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：${missingDaily}）`;
-      lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
+      const unselected=payload.contentSections.unselectedChartMetrics;
+      const missingChart=unselected?Object.keys(unselected).filter(field=>!payload.chartSeries?.some(r=>r[field]!=null)&&!payload.metricSeries.some(r=>r[field]!=null)):[];
+      const message=missingChart.length?`保存済み ${at}｜記事${verified.articleCount}件・日別PV ${count}日｜グラフの一部は未取得：${missingChart.map(f=>chartMetricLabels[f]).join('、')}`:complete?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・${count?'日別PV '+count+'日':'全期間グラフ '+chartCount+'点'}`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：${missingDaily}）`;
+      lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article,unselectedChartMetrics:payload.contentSections.unselectedChartMetrics}}]);
       saveQueue.remember('mumei-dashboard-last-result:'+paired,message);
       if(captureRevision!==pending.readRevision||officialDataSignature()!==pending.readSignature){if(autoOn()){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900)}else setStatus('保存確認済み｜追加データあり。読込で保存します','ok');return}
-      setStatus(message,complete?'ok':'partial');
-      if(!complete)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
+      setStatus(message,complete&&!missingChart.length?'ok':'partial');
+      if(missingChart.length)reportDiagnostic('['+unselected[missingChart[0]]+']',checkpoint,scope,token);
+      else if(!complete)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
     }catch(e){
       autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'一時停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&checkpoint.scope.connection===connectionKey();
       if(valid&&connectionVerified&&/STOPPED|SURFACE_LEFT|VIEW_CHANGED|TAB_NOT_OPEN/.test(message)&&checkpoint.result){
@@ -677,7 +700,7 @@
     const line=panel?.querySelector('#mumei-dash-brief');if(!line)return;
     const counts=message.match(/記事\d+件・日別PV \d+日/)?.[0];
     const reason=/HTTP_402/.test(message)?'保存先が利用制限中':/VIEW_CHANGED/.test(message)?'期間・画面変更で停止':/SURFACE_LEFT/.test(message)?'画面を離れたため一時停止':/READ_WAIT|TIMEOUT/.test(message)?'公式データの応答待ちで停止':/SAVE_COUNT|SAVE_VALUE|SAVE_RESPONSE/.test(message)?'保存を確認できません':/ACCOUNT_MISMATCH|アカウント不一致/.test(message)?'アカウント不一致':/連携/.test(message)?'保存先の連携を確認':/PANEL_NOT_OPEN|TAB_NOT_OPEN|METRIC_NOT_SELECTED/.test(message)?'公式表示を開けず停止':'読込が止まりました';
-    line.textContent=kind==='warn'?reason:kind==='paused'?'一時停止｜読み込みで再開':kind==='partial'?(/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'読み込み中'+(counts?'｜'+counts:''):needsPair?'未連携｜連携してください':autoOn()?'ダッシュボード同期':'読み込みで開始';
+    line.textContent=kind==='warn'?reason:kind==='paused'?'一時停止｜読み込みで再開':kind==='partial'?(/グラフの一部/.test(message)?'記事保存済み｜グラフ一部未取得':/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'読み込み中'+(counts?'｜'+counts:''):needsPair?'未連携｜連携してください':autoOn()?'ダッシュボード同期':'読み込みで開始';
     line.dataset.kind=kind;
   }
   function paintMode(){
