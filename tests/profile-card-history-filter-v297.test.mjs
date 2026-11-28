@@ -43,6 +43,25 @@ test('the top count applies to all dates and to a selected day in Japan',()=>{
  }finally{r.dom.window.close()}
 });
 
+test('custom index dates are reusable and a checkpoint cannot resume a different date or layout',()=>{
+ const r=editor();try{
+  const starts=[];r.w.restartFixed300=options=>starts.push(options);
+  const customStart=r.detail.querySelector('[data-a="history-range-index"]');
+  assert.equal(customStart.hidden,true);
+  r.field('period').value='range';r.field('period').dispatchEvent(new r.w.Event('change',{bubbles:true}));
+  assert.equal(customStart.hidden,false);
+  r.field('from').value='2026-12-01';r.field('to').value='2026-12-02';customStart.click();
+  const [requested]=starts;
+  assert.deepEqual(plain(requested.historyFilter),{fromDate:'2026-12-01',toDate:'2026-12-02',articleKey:'',timezone:'Asia/Tokyo'});
+  r.field('to').value='2026-11-30';customStart.click();assert.equal(starts.length,1);
+  const saved=r.api.checkpointHistoryOptions(requested);
+  assert.equal(saved.creatorIndex,true);assert.equal(saved.target,Infinity);
+  for(const other of [{...requested,creatorIndex:false},{...requested,historyFilter:{...requested.historyFilter,toDate:'2026-12-03'}}]){
+   assert.throws(()=>r.api.checkpointHistoryOptions(saved,other),/一致しません/);
+  }
+ }finally{r.dom.window.close()}
+});
+
 test('single day, inclusive range, selected article and invalid values do not fall back to recent likes',()=>{
  const r=editor();try{
   r.field('period').value='date';r.field('from').value='2026-10-03';
@@ -141,10 +160,25 @@ test('real dated image flow saves the filter and pauses/resumes the exact plan, 
  assert.deepEqual(Array.from(result.rows.slice(0,-1),row=>row.likedArticleKey),[article,article,article]);assert.equal(result.rows.at(-1).urlname,'fuku444');assert.equal(result.items.length,4);
 });
 
-test('starting a dated batch again fetches a fresh snapshot before clearing the previous owned paste',{skip:!dependencies},async t=>{
+test('a fresh dated start fetches once; repeated starts resume or protect the existing paste',{skip:!dependencies},async t=>{
  const r=await runtime({count:2});t.after(()=>r.close());
- const opts={mode:'all',count:1500,target:Infinity,historyFilter:filter};r.c.opts=opts;r.c.events=[];
- r.gm.set('mumei_profile_card_likes_300_v2',{at:297,historyFilter:filter,people:r.people.slice(0,2)});
- await r.editor.createFixed300(opts);r.editor.patch(`globalThis.restart=restartFixed300;const existingHistoryOptions=historyOptions;historyOptions=run=>run?existingHistoryOptions(run):opts;prepareLikesHistoryExport=async()=>{events.push('fetch')};const existingClear=clearCurrentPaste;clearCurrentPaste=(...args)=>{events.push('clear');return existingClear(...args)};createFixed300=async()=>{events.push('create')};`);
- await r.c.restart();assert.deepEqual(Array.from(r.c.events),['fetch','clear','create']);assert.deepEqual(plain(r.editor.readRun().historyFilter),filter);
+ const options={mode:'all',count:1500,target:Infinity,historyFilter:filter,choice:'latest'};
+ r.c.snapshot={at:297,historyFilter:filter,people:r.people.slice(0,2)};
+ r.c.events=[];
+ r.editor.patch(`globalThis.restart=restartFixed300;
+  prepareLikesHistoryExport=async()=>{events.push('fetch');await GM_setValue(BRIDGE_KEY,snapshot)};
+  const originalResume=resumeFixed300;resumeFixed300=async()=>{events.push('resume');return originalResume()};`);
+ assert.equal(r.editor.readRun(),null);
+ await r.c.restart(options);
+ const first=r.editor.readRun(),doc=r.view.state.doc.toJSON();
+ assert.equal(first.items.length,3);assert.deepEqual(plain(first.historyFilter),filter);
+ assert.deepEqual(Array.from(r.c.events),['fetch']);
+ await r.c.restart(options);
+ assert.deepEqual(Array.from(r.c.events),['fetch','resume']);
+ for(const conflicting of [{...options,historyFilter:{...filter,toDate:'2026-11-10'}},{...options,creatorIndex:true}]){
+  await r.c.restart(conflicting);
+  assert.deepEqual(Array.from(r.c.events),['fetch','resume']);
+  assert.deepEqual(r.view.state.doc.toJSON(),doc);
+  assert.deepEqual(plain(r.editor.readRun().items),plain(first.items));
+ }
 });
