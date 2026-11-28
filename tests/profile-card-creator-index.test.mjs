@@ -35,14 +35,14 @@ function withRealFormulaRenderer(r, transform = formula => formula) {
   return dom;
 }
 
-async function creatorRuntime(t, names = creatorNames) {
-  const r = await runtime({ count: names.length, requestMutator(url, payload) {
+async function creatorRuntime(t, names = creatorNames, { requestMutator, ...options } = {}) {
+  const r = await runtime({ ...options, count: names.length, requestMutator(url, payload) {
     const match = new URL(url).pathname.match(/\/creators\/quality_person_(\d+)$/);
     if (match) {
       payload.data.creator.nickname = names[Number(match[1])];
       payload.data.creator.profile = profiles[Number(match[1])];
     }
-    return payload;
+    return requestMutator ? requestMutator(url, payload) : payload;
   } });
   t.after(() => r.close());
   const people = r.people.slice(0, names.length).map((person, index) => ({ ...person,
@@ -207,4 +207,325 @@ test('a rendered formula is checked against note’s source annotation and visib
   assert.throws(() => r.c.inspectFormula(view, 1, formula), /一致/);
   annotation.remove();
   assert.throws(() => r.c.inspectFormula(view, 1, formula), /一致/);
+});
+
+
+function sectionNodes(doc, name) {
+  const start = doc.findIndex(node => node.type === 'heading' && node.content[0].text === name);
+  assert.ok(start >= 0, `missing creator heading ${name}`);
+  const end = doc.findIndex((node, i) => i > start && node.type === 'horizontal_rule');
+  assert.ok(end > start, `missing divider for ${name}`);
+  return doc.slice(start, end + 1);
+}
+
+test('a verified blank bio and missing article artwork each keep their author through pause and reload, while a confirmed empty article list is excluded', { skip: !dependencies || !katex }, async t => {
+  const r = await creatorRuntime(t, ['あい', 'いお', 'うみ', 'えま'], { noThumbIndex: 1, noArticleIndex: 3, requestMutator(url, payload) {
+    if (new URL(url).pathname.endsWith('/creators/quality_person_0')) payload.data.creator.profile = '';
+    return payload;
+  } });
+  const dom = withRealFormulaRenderer(r);
+  t.after(() => dom.window.close());
+  r.state.pauseAt = 1;
+  await r.editor.createFixed300(historyOptions);
+  const paused = r.editor.readRun();
+  assert.equal(paused?.paused, true, r.state.statuses.at(-1)?.text);
+  assert.deepEqual(Array.from(paused.rows, row => row.creator), ['あい', 'いお', 'うみ']);
+  const before = r.doc().content;
+  const short = sectionNodes(before, 'あい');
+  assert.deepEqual(short.map(node => node.type), ['heading', 'image', 'horizontal_rule']);
+  assert.equal(short[1].attrs.link, paused.rows[0].url);
+  assert.equal(short[1].content?.length || 0, 0);
+  const refreshed = await r.reload();
+  t.after(() => refreshed.close());
+  const freshDom = withRealFormulaRenderer(refreshed);
+  t.after(() => freshDom.window.close());
+  await refreshed.editor.createFixed300();
+  const run = refreshed.editor.readRun();
+  assert.equal(run.stage, 'images_ready', refreshed.state.statuses.at(-1)?.text);
+  assert.equal(run.items.length, 3);
+  assert.equal(refreshed.state.serial, 3);
+  assert.deepEqual(sectionNodes(refreshed.doc().content, 'あい'), short);
+  const noArt = sectionNodes(refreshed.doc().content, 'いお');
+  assert.deepEqual(noArt.map(node => node.type), ['heading', 'paragraph', 'image', 'horizontal_rule']);
+  assert.equal(noArt[2].attrs.link, 'https://note.com/quality_person_1/n/n000000000002');
+  assert.equal(noArt[2].content?.length || 0, 0);
+  assert.equal(run.rows[1].articleThumbnailMissing, true);
+  assert.equal(run.rows[1].thumbUrl || '', '');
+});
+
+test('the newest accessible public article belongs to the creator when a more recent listed article was removed', { skip: !dependencies || !katex }, async t => {
+  const removedKey = 'naaaaaaaaaab0';
+  const olderKey = 'n000000000001';
+  const r = await creatorRuntime(t, ['あい'], { requestMutator(url, payload) {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/creators/quality_person_0/contents') && payload.data.contents.length) {
+      const older = payload.data.contents[0];
+      const removed = { ...older, key: removedKey, name: '消えた記事', publishAt: '2026-10-15T01:00:00Z', noteUrl: 'https://note.com/quality_person_0/n/' + removedKey };
+      payload.data = { contents: [removed, older], totalCount: 2, isLastPage: true };
+    }
+    if (path.endsWith('/creators/quality_person_0')) payload.data.creator.noteCount = 2;
+    if (path.endsWith('/notes/' + removedKey)) throw Object.assign(new Error('GET 404 ' + url), { status: 404 });
+    return payload;
+  } });
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  assert.equal(run?.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.equal(run.rows.length, 1);
+  assert.equal(run.rows[0].url, 'https://note.com/quality_person_0/n/' + olderKey);
+  assert.equal(sectionNodes(r.doc().content, 'あい').find(node => node.type === 'image').attrs.link, run.rows[0].url);
+  assert.ok(r.state.requests.some(url => url.includes(removedKey)));
+});
+
+test('a temporary outage cannot finish the index with a missing author, and reopening continues the same likes period', { skip: !dependencies || !katex }, async t => {
+  let unavailable = true;
+  const r = await creatorRuntime(t, ['あい', 'いお'], { requestMutator(url, payload) {
+    if (unavailable && url.includes('/creators/quality_person_1/contents')) throw Object.assign(new Error('GET 503 ' + url), { status: 503 });
+    return payload;
+  } });
+  await r.editor.createFixed300(historyOptions);
+  assert.notEqual(r.editor.readRun()?.stage, 'images_ready');
+  assert.equal(r.state.serial, 0);
+  assert.equal(r.state.statuses.at(-1).bad, true);
+  const prep = r.page.__MUMEI_PROFILE_CARD_PREP_STORE__.read();
+  assert.ok(prep.creatorIndexBridge.people.some(row => row.urlname === 'quality_person_1'));
+  assert.ok(!prep.skipped?.some(row => row.urlname === 'quality_person_1'));
+  const fresh = await r.reload();
+  t.after(() => fresh.close());
+  unavailable = false;
+  fresh.editor.patch('globalThis.resumeIndex = resumeFixed300;');
+  await fresh.c.resumeIndex();
+  const run = fresh.editor.readRun();
+  assert.equal(run?.stage, 'images_ready', fresh.state.statuses.at(-1)?.text);
+  assert.deepEqual(plain(run.historyFilter), period);
+  assert.deepEqual(Array.from(run.rows, row => row.creator), ['あい', 'いお']);
+  assert.equal(fresh.state.serial, 2);
+});
+
+test('an empty first listing cannot exclude a creator whose owned profile still reports published articles', { skip: !dependencies }, async t => {
+  const r = await creatorRuntime(t, ['あい', 'いお'], { noArticleIndex: 1, requestMutator(url, payload) {
+    if (new URL(url).pathname.endsWith('/creators/quality_person_1')) payload.data.creator.noteCount = 4;
+    return payload;
+  } });
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  const prep = r.page.__MUMEI_PROFILE_CARD_PREP_STORE__.read();
+  if (run?.stage === 'images_ready') {
+    const author = run.rows.find(row => row.urlname === 'quality_person_1');
+    assert.ok(author, 'a previously nonzero creator can only complete with an actual owned article');
+    assert.match(author.url, /^https:\/\/note\.com\/quality_person_1\/n\/n[a-f0-9]{12}$/);
+  } else {
+    assert.equal(r.state.statuses.at(-1).bad, true);
+  }
+  assert.ok(!prep.skipped?.some(row => row.urlname === 'quality_person_1'));
+});
+
+test('permanent artwork errors try the original image URL and retain a title card, and temporary artwork outages resume without duplicate uploads', { skip: !dependencies }, async t => {
+  const r = await creatorRuntime(t, ['あい', 'いお']);
+  r.c.imageAttempts = [];
+  r.editor.patch(`
+    const normalBitmap = bitmapFromUrl;
+    bitmapFromUrl = async url => {
+      const parsed = new URL(url);
+      if (/\\/thumb[01]\\.png$/.test(parsed.pathname)) {
+        imageAttempts.push(url);
+        if (parsed.pathname.endsWith('/thumb0.png')) throw Error('GET 404 ' + url);
+        if (parsed.pathname.endsWith('/thumb1.png')) throw Object.assign(Error('通信失敗 ' + url), { code: 'REQUEST_FAILED' });
+      }
+      return normalBitmap(url);
+    };
+  `);
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  assert.ok(run, r.state.statuses.at(-1)?.text);
+  assert.notEqual(run.stage, 'images_ready');
+  assert.equal(run.items.length, 1);
+  assert.equal(run.rows.length, 2);
+  assert.equal(r.state.statuses.at(-1).bad, true);
+  const card = sectionNodes(r.doc().content, 'あい').find(node => node.type === 'image');
+  assert.equal(card.attrs.link, run.rows[0].url);
+  const firstArtwork = Array.from(r.c.imageAttempts, value => new URL(value)).filter(url => url.pathname.endsWith('/thumb0.png'));
+  assert.ok(firstArtwork.some(url => url.searchParams.has('width')));
+  assert.ok(firstArtwork.some(url => !url.search));
+  const fresh = await r.reload();
+  t.after(() => fresh.close());
+  await fresh.editor.createFixed300();
+  assert.equal(fresh.editor.readRun().stage, 'images_ready', fresh.state.statuses.at(-1)?.text);
+  assert.equal(fresh.state.serial, 2);
+  assert.equal(sectionNodes(fresh.doc().content, 'あい').find(node => node.type === 'image').attrs.id, card.attrs.id);
+  assert.equal(sectionNodes(fresh.doc().content, 'いお').find(node => node.type === 'image').attrs.link, run.rows[1].url);
+});
+
+test('a temporary article-detail failure recovers the same newest article from its canonical public page', { skip: !dependencies }, async t => {
+  const canonical = 'https://note.com/quality_person_0/n/n000000000001';
+  const r = await creatorRuntime(t, ['あい'], { requestMutator(url, payload) {
+    if (new URL(url).pathname === '/api/v3/notes/n000000000001') throw Object.assign(Error('GET 503 ' + url), { status: 503 });
+    return payload;
+  } });
+  r.c.canonical = canonical;
+  r.c.publicPageReads = [];
+  r.editor.patch(`
+    const readOtherURL = xhr;
+    xhr = async (url, ...args) => {
+      if (url.split('?')[0] !== canonical) return readOtherURL(url, ...args);
+      publicPageReads.push(url);
+      return '<!doctype html><html><head><link rel="canonical" href="' + canonical + '"><meta property="og:title" content="公開中の作品"><meta property="og:image" content="https://assets.st-note.com/thumb0.png"></head><body><article><h1>公開中の作品</h1><p>季節の写真を紹介します。</p></article></body></html>';
+    };
+  `);
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  assert.ok(r.c.publicPageReads.length > 0, r.state.statuses.at(-1)?.text);
+  assert.equal(run?.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.equal(run.rows[0].url, canonical);
+  assert.equal(sectionNodes(r.doc().content, 'あい').find(node => node.type === 'image').attrs.link, canonical);
+});
+
+async function completedLegacyIndex(t) {
+  const r = await creatorRuntime(t, ['あい', 'いお', 'うみ'], { requestMutator(url, payload) {
+    if (new URL(url).pathname.endsWith('/creators/quality_person_1')) payload.data.creator.profile = '';
+    return payload;
+  } });
+  const storage = r.page.__MUMEI_PROFILE_CARD_PREP_STORE__;
+  const original = storage.read();
+  const fullBridge = original.creatorIndexBridge;
+  const previouslySkipped = fullBridge.people[1];
+  storage.write({ ...original, creatorIndexBridge: { ...fullBridge, people: fullBridge.people.filter(person => person.urlname !== previouslySkipped.urlname) } });
+  await storage.flush();
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  assert.equal(run?.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.equal(run.items.length, 2);
+  const { creatorIndexCoverage: oldCoverage, ...legacyRun } = run;
+  const { creatorIndexCoverage: oldPrepCoverage, ...legacyPrep } = storage.read();
+  r.editor.writeRun({ ...legacyRun, version: '2.9.69' });
+  storage.write({ ...legacyPrep, creatorIndexBridge: fullBridge, index: 3, signature: fullBridge.at + '|all|creator-index-v1|latest',
+    skipped: [{ urlname: previouslySkipped.urlname, likerKey: previouslySkipped.likerKey, code: 'PROFILE_UNAVAILABLE', reason: 'プロフィール未設定' }] });
+  await storage.flush();
+  await r.page.__MUMEI_PROFILE_CARD_RUN_STORE__.flush();
+  return r;
+}
+
+test('resuming a completed legacy index inserts the previously skipped creator between intact entries without re-uploading either original', { skip: !dependencies }, async t => {
+  const r = await completedLegacyIndex(t);
+  const before = r.doc().content;
+  const fresh = await r.reload();
+  t.after(() => fresh.close());
+  fresh.editor.patch('globalThis.recoverIndex = resumeFixed300;');
+  await fresh.c.recoverIndex();
+  const run = fresh.editor.readRun();
+  assert.equal(run?.stage, 'images_ready', fresh.state.statuses.at(-1)?.text);
+  assert.equal(run.creatorIndexCoverage, 2);
+  assert.deepEqual(Array.from(run.rows, row => row.creator), ['あい', 'いお', 'うみ']);
+  const after = fresh.doc().content;
+  assert.deepEqual(after.filter(node => node.type === 'heading').map(node => node.content[0].text), ['あい', 'いお', 'うみ']);
+  for (const name of ['あい', 'うみ']) assert.deepEqual(sectionNodes(after, name), sectionNodes(before, name));
+  assert.deepEqual(sectionNodes(after, 'いお').map(node => node.type), ['heading', 'image', 'horizontal_rule']);
+  assert.equal(fresh.state.serial, 3);
+  await fresh.c.recoverIndex();
+  assert.equal(fresh.state.serial, 3);
+  assert.deepEqual(fresh.doc().content, after);
+});
+
+test('a manually edited old section blocks legacy gap insertion and preserves the entire draft', { skip: !dependencies }, async t => {
+  const r = await completedLegacyIndex(t);
+  let imagePos;
+  r.view.state.doc.forEach((node, pos) => { if (imagePos === undefined && node.type.name === 'image') imagePos = pos; });
+  const image = r.view.state.doc.nodeAt(imagePos);
+  const edited = image.type.create(image.attrs, r.schema.text('自分で追記したキャプション'));
+  r.view.dispatch(r.view.state.tr.replaceWith(imagePos, imagePos + image.nodeSize, edited));
+  const before = r.doc();
+  const fresh = await r.reload();
+  t.after(() => fresh.close());
+  fresh.editor.patch('globalThis.recoverIndex = resumeFixed300;');
+  await fresh.c.recoverIndex();
+  assert.equal(fresh.state.statuses.at(-1).bad, true);
+  assert.equal(fresh.state.serial, 2);
+  assert.deepEqual(fresh.doc(), before);
+});
+
+test('a verified newest unpinned post on the first newest-first page finishes without loading a creator’s older pages', { skip: !dependencies }, async t => {
+  const r = await creatorRuntime(t, ['あい'], { requestMutator(url, payload) {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/creators/quality_person_0/contents')) {
+      if (Number(u.searchParams.get('page')) > 1) throw Error('unexpected older page');
+      payload.data.contents = payload.data.contents.map(note => ({ ...note, isPinned: false }));
+      payload.data.isLastPage = false;
+      payload.data.totalCount = 600;
+    }
+    if (u.pathname.endsWith('/creators/quality_person_0')) payload.data.creator.noteCount = 600;
+    return payload;
+  } });
+  await r.editor.createFixed300(historyOptions);
+  assert.equal(r.editor.readRun()?.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.equal(sectionNodes(r.doc().content, 'あい').find(node => node.type === 'image').attrs.link, 'https://note.com/quality_person_0/n/n000000000001');
+  assert.ok(!r.state.requests.some(value => { const u = new URL(value); return u.pathname.endsWith('/contents') && Number(u.searchParams.get('page')) > 1; }));
+});
+
+test('a held unpublished section can refresh its name and continue with a verified article lacking both bio and artwork', { skip: !dependencies || !katex }, async t => {
+  let retry = false;
+  const r = await creatorRuntime(t, ['A', 'B', 'C'], { requestMutator(url, payload) {
+    const path = new URL(url).pathname;
+    if (retry && path.endsWith('/creators/quality_person_1')) {
+      payload.data.creator.nickname = 'Z';
+      payload.data.creator.profile = '';
+    }
+    if (retry && path.endsWith('/notes/n000000000002')) {
+      payload.data.eyecatch = null;
+      payload.data.eyecatch_url = null;
+      payload.data.user.profile = '';
+    }
+    return payload;
+  } });
+  const dom = withRealFormulaRenderer(r);
+  t.after(() => dom.window.close());
+  r.state.pauseAt = 1;
+  await r.editor.createFixed300(historyOptions);
+  const paused = r.editor.readRun();
+  assert.equal(paused?.items?.length, 1, r.state.statuses.at(-1)?.text);
+  const row = paused.rows[1];
+  const identity = { account: row.urlname, key: row.key, url: row.url };
+  r.editor.writeRun({ ...paused, qualityHold: {
+    version: 1, kind: 'source', phase: 'images', index: 1, identity, articleKey: paused.articleKey, runId: paused.createdAt,
+    reasons: [{ code: 'PROFILE_ACCOUNT', expected: row.urlname, actual: 'another_creator' }],
+  } });
+  retry = true;
+  r.state.pauseAt = 0;
+  await r.editor.createFixed300();
+  const result = r.editor.readRun();
+  assert.equal(result.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.ok(!result.qualityHold);
+  assert.deepEqual(Array.from(result.rows, row => row.creator), ['A', 'C', 'Z']);
+  assert.equal(result.items[0].id, paused.items[0].id);
+  const refreshed = result.rows[2];
+  assert.equal(refreshed.creatorIndexKey.display, 'Z');
+  assert.equal(refreshed.creatorIndexProfileMissing, true);
+  assert.equal(refreshed.articleThumbnailMissing, true);
+  assert.equal(refreshed.thumbnailMissingEvidence.articleUrl, row.url);
+  const blocks = r.doc().content;
+  const heading = blocks.findIndex(block => block.type === 'heading' && block.content[0].text === 'Z');
+  assert.deepEqual(blocks.slice(heading, heading + 3).map(block => block.type), ['heading', 'image', 'horizontal_rule']);
+  assert.equal(blocks[heading + 1].attrs.link, row.url);
+});
+
+test('unavailable creator listings can recover from an RSS article and verify its author using the public article detail', { skip: !dependencies }, async t => {
+  const canonical = 'https://note.com/quality_person_0/n/n000000000001';
+  const r = await creatorRuntime(t, ['あい'], { requestMutator(url, payload) {
+    if (new URL(url).pathname.endsWith('/creators/quality_person_0/contents')) throw Error('GET 503 ' + url);
+    return payload;
+  } });
+  r.c.feedDocument = `<rss version="2.0"><channel><title>あい</title><item><title>写真日記</title><link>${canonical}</link><pubDate>Wed, 01 Jan 2025 00:00:00 GMT</pubDate></item></channel></rss>`;
+  r.c.readFeeds = [];
+  r.editor.patch(`
+    const fetchOther = xhr;
+    xhr = async (url, ...args) => {
+      if (url !== 'https://note.com/quality_person_0/rss') return fetchOther(url, ...args);
+      readFeeds.push(url);
+      return feedDocument;
+    };
+  `);
+  await r.editor.createFixed300(historyOptions);
+  const run = r.editor.readRun();
+  assert.equal(run?.stage, 'images_ready', r.state.statuses.at(-1)?.text);
+  assert.equal(r.c.readFeeds.length, 1);
+  assert.equal(run.rows[0].url, canonical);
+  assert.ok(r.state.requests.some(value => new URL(value).pathname === '/api/v3/notes/n000000000001'));
 });

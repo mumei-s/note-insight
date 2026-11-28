@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/likes300-fix
-// @version      2.9.69
+// @version      2.9.70
 // @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,8 +21,8 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.69')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.69';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.9.70')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.9.70';
 let creatorIndexKatex;
 const verifiedProfileFormulas=new Map();
 // Parse the same standalone formula that note will receive. Check each rendered
@@ -181,9 +181,9 @@ function articleEvidence(raw,source='creator-list'){
  if(source==='note-api'){const tags=assignedTagEvidence(note);if(tags)result.assignedTags=tags}
  return result;
 }
-function profileEvidence(raw,target){
+function profileEvidence(raw,target,source='creator-api'){
  const p=raw||{};
- return{source:'creator-api',requested:account(target),account:account(p.urlname||p.urlName),nameHash:fingerprint(p.nickname||p.name||''),icon:cleanUrl(p.profileImageUrl||p.user_profile_image_url||p.profile_image_url||p.user_profile_image_path||p.profile_image_path||p.profileImagePath||p.icon_url||p.image_url)};
+ return{source,requested:account(target),account:account(p.urlname||p.urlName),nameHash:fingerprint(p.nickname||p.name||''),icon:cleanUrl(p.profileImageUrl||p.user_profile_image_url||p.profile_image_url||p.user_profile_image_path||p.profile_image_path||p.profileImagePath||p.icon_url||p.image_url)};
 }
 function sourceBinding(row){
  // Reuse only calculations for exactly equal scalar inputs. Every gate still
@@ -220,11 +220,11 @@ function rawRow(row,raw,creator={}){
  if(!row)return row;
  return attach(row,{version:1,target:account(creator.urlname)||account(row.urlname),articles:[articleEvidence(raw)],actor:creator.urlname?{account:account(creator.urlname),icon:cleanUrl(creator.actorImageUrl),source:'target-selection'}:null,binding:sourceBinding(row)});
 }
-function acquired(row,{target,note,profile,selected,normalizedProfile=false}={}){
+function acquired(row,{target,note,profile,selected,normalizedProfile=false,articleSource='note-api',profileSource='creator-api'}={}){
  if(!row)return row;
  const previous=provenance(selected)||provenance(row);
- const articles=[...(previous?.articles||[]),...(note&&typeof note==='object'?[articleEvidence(note,'note-api')]:[])].slice(-3);
- const result=attach(row,{version:1,target:account(target)||previous?.target||account(row.urlname),articles,actor:previous?.actor||null,profile:profile?(normalizedProfile?profile:profileEvidence(profile,target||row.urlname)):previous?.profile||null,binding:sourceBinding(row)});
+ const articles=[...(previous?.articles||[]),...(note&&typeof note==='object'?[articleEvidence(note,articleSource)]:[])].slice(-3);
+ const result=attach(row,{version:1,target:account(target)||previous?.target||account(row.urlname),articles,actor:previous?.actor||null,profile:profile?(normalizedProfile?profile:profileEvidence(profile,target||row.urlname,profileSource)):previous?.profile||null,binding:sourceBinding(row)});
  record(result,'取得',assessIdentity(result));
  return result;
 }
@@ -308,7 +308,7 @@ function hasVerifiedFreshIdentity(row){
   if(!target||id.account!==target||id.urlAccount!==target||proof?.profile?.account!==target||strictIdentityReasons(row,proof).length)return false;
   if(row?.sourceScope?.kind==='tag'&&tagScopeEvidence(row,proof)?.status!=='confirmed')return false;
   if(row.profileOnly)return !id.key&&!id.urlKey;
-  return !!id.key&&id.key===id.urlKey&&(proof?.articles||[]).some(source=>source.source==='note-api'&&account(source.account)===target&&articleKey(source.key)===id.key);
+  return !!id.key&&id.key===id.urlKey&&(proof?.articles||[]).some(source=>(source.source==='note-api'||row.creatorIndex===true&&source.source==='public-note-page')&&account(source.account)===target&&articleKey(source.key)===id.key);
  },false);
 }
 function hasVerifiedFileIdentity(row,file){
@@ -381,8 +381,8 @@ function assessBinding(row,binding,stage){
 function assessAssets(row){
  const proof=provenance(row),out=[],binding=sourceBinding(row);
  for(const [field,label] of [['icon','アイコン取得元'],['thumbnail','記事画像取得元']]){
-  const rendered=row?.finalMarker?row.renderAssetStatus?.[field==='icon'?'avatar':'thumbnail']:null;
-  if(rendered==='missing'||rendered==='failed'){out.push(finding(rendered==='missing'?'candidate':'insufficient',label,'最後の実績画像の'+(rendered==='missing'?'画像が未設定':'画像を読み込めず代替表示')+'。実画像の表示確認は未実施'));continue}
+  const rendered=row?.finalMarker||row?.creatorIndex?row.renderAssetStatus?.[field==='icon'?'avatar':'thumbnail']:null;
+  if(rendered==='missing'||rendered==='failed'){out.push(finding(rendered==='missing'?'candidate':'insufficient',label,(row.creatorIndex?'極薄の':'最後の実績画像の')+(rendered==='missing'?'画像が未設定':'画像を読み込めず代替表示')+'。実画像の表示確認は未実施'));continue}
   const selected=binding[field];
   if(!selected){out.push(finding('unperformed',label,'画像未設定の既存経路。人物認識の判定はしない'));continue}
   const evidence=[...(proof?.articles||[]),...(field==='icon'?[proof?.profile,proof?.actor].filter(Boolean):[])];
@@ -393,6 +393,7 @@ function assessAssets(row){
 }
 function assessPresentation(row){
  const value=row?.presentation;if(!value)return[];
+ if(row.creatorIndexProfileMissing===true&&value.content==='profile'&&value.status==='unavailable'&&!value.text)return[finding('confirmed','プロフィール欄','紹介文を省き、記事の見出しと画像を掲載')];
  if(value.status!=='available')return[finding('candidate','表示本文の取得元','選択した本文を確認できないため未取得として表示。自動補完しない')];
  const source=value.source||{},out=[];
  if(!['profile','note-free','note-public-lead'].includes(source.kind))return[finding('insufficient','表示本文の取得元','独立した取得元の識別情報が不足')];
@@ -890,7 +891,7 @@ root.__MUMEI_PROFILE_CARD_GALLERY__={version:VERSION,parseCreatorsCsv,validatePa
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.9.69';
+const VERSION='2.9.70';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -5634,7 +5635,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_LIKE300_FIX_V280__)return;
 page.__MUMEI_LIKE300_FIX_V280__=true;
 
-const VERSION='2.9.69';
+const VERSION='2.9.70';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const contentApi=page.__MUMEI_PROFILE_CARD_CONTENT__;
@@ -6174,7 +6175,11 @@ async function xhr(url,responseType='text',timeout=60000){
      done();
      if(stopRequested){reject(new Error('停止しました'));return}
      if(r.status>=200&&r.status<300)resolve(r.response);
-     else reject(new Error('GET '+r.status+' '+url))
+     else{
+      const retryAfter=String(r.responseHeaders||'').match(/^retry-after:\s*(.+)$/im)?.[1]?.trim();
+      const delay=retryAfter?(/^\d+$/.test(retryAfter)?Number(retryAfter)*1000:Date.parse(retryAfter)-Date.now()):0;
+      reject(Object.assign(new Error('GET '+r.status+' '+url),{status:r.status,retryAfterMs:Number.isFinite(delay)?Math.max(0,delay):0}));
+     }
     },
     onerror:()=>fail('通信失敗','REQUEST_FAILED'),
     ontimeout:()=>fail('通信タイムアウト','REQUEST_TIMEOUT'),
@@ -6574,6 +6579,179 @@ function avatarUrl(user){
 function thumbnailUrl(note){
  return mediaUrl(note?.eyecatch||note?.eyecatch_url||note?.spEyecatch||note?.thumbnailExternalUrl||note?.image_url||note?.imageUrl||note?.thumbnail_url||note?.thumbnailUrl||note?.eyecatch_image||note?.eyecatchImage||note?.image||note?.thumbnail||'')
 }
+let creatorIndexRateLimitUntil=0;
+function creatorIndexHttpStatus(error){return Number(error?.status)||Number(String(error?.message||'').match(/\bGET (\d{3})\b/)?.[1])||0}
+function creatorIndexInterrupted(error){return stopRequested||pauseRequested||['STOPPED','PAUSED'].includes(error?.code)}
+async function creatorIndexRead(request){
+ for(let attempt=0;;attempt++){
+  if(stopRequested)throw new Error('停止しました');
+  checkPause();
+  const delay=creatorIndexRateLimitUntil-Date.now();
+  if(delay>60000)throw new Error('noteがアクセスを制限中です。間隔を空けて「続きから」で再開してください');
+  if(delay>0)await sleep(delay);
+  if(stopRequested)throw new Error('停止しました');
+  checkPause();
+  try{return await request()}catch(error){
+   const status=creatorIndexHttpStatus(error);
+   if(status===429)creatorIndexRateLimitUntil=Math.max(creatorIndexRateLimitUntil,Date.now()+(error.retryAfterMs||2000));
+   if(attempt||creatorIndexInterrupted(error)||!(status===408||status===429||status>=500||['REQUEST_FAILED','REQUEST_TIMEOUT'].includes(error.code)))throw error;
+   if(status!==429)await sleep(500);
+  }
+ }
+}
+function creatorIndexHidden(note){
+ return note?.is_draft===true||note?.isDraft===true||note?.is_published===false||note?.isPublished===false||note?.is_public===false||note?.isPublic===false||note?.is_deleted===true||['draft','scheduled','private','deleted','unpublished'].includes(String(note?.status||'').toLowerCase());
+}
+const creatorIndexPublicPageDetails=new WeakSet();
+async function creatorIndexPublicDetail(row){
+ const unavailable=error=>[404,410].includes(creatorIndexHttpStatus(error));
+ const url='https://note.com/api/v3/notes/'+encodeURIComponent(row.key);
+ try{
+  const payload=await creatorIndexRead(()=>xhrJSON(url)),note=payload?.data||payload;
+  if(creatorIndexHidden(note)&&String(note?.key||'')===row.key&&!summaryMismatch(row,note))return null;
+  if(!historyDetailMatches(row,note))throw historySelectionError(row,'記事詳細と投稿者が一致しません');
+  return note;
+ }catch(apiError){
+  if(unavailable(apiError))return null;
+  if(creatorIndexInterrupted(apiError)||[401,403,429].includes(creatorIndexHttpStatus(apiError))||creatorIndexRateLimitUntil>Date.now())throw apiError;
+  try{
+   const html=await creatorIndexRead(()=>xhr(row.url,'text',30000));
+   const dom=new DOMParser().parseFromString(String(html),'text/html');
+   const actual=summaryIdentity(dom.querySelector('link[rel="canonical"]')?.getAttribute('href')||dom.querySelector('meta[property="og:url"]')?.content);
+   if(actual.account!==row.urlname||actual.key!==row.key)throw apiError;
+   const structured=Array.from(dom.querySelectorAll('script[type="application/ld+json"]')).flatMap(node=>{
+    try{const value=JSON.parse(node.textContent);return Array.isArray(value)?value:value['@graph']||[value]}catch{return []}
+   }).find(value=>['Article','BlogPosting','NewsArticle'].includes(value?.['@type']));
+   const body=dom.querySelector('.note-common-styles__textnote-body, article .note-body, article')?.textContent?.trim()||structured?.articleBody;
+   if(typeof body!=='string'||!body.trim())throw apiError;
+   const tags=Array.from(dom.querySelectorAll('a[href*="/hashtag/"],meta[property="article:tag"]'),node=>String(node.content||node.textContent||'').trim());
+   const detail={key:row.key,noteUrl:row.url,user:{urlname:row.urlname},publishAt:structured?.datePublished||row.publishAt,name:structured?.headline||row.title,body,description:dom.querySelector('meta[name="description"]')?.content||'',hashtags:tags,eyecatch:row.thumbUrl||null};
+   creatorIndexPublicPageDetails.add(detail);
+   return detail;
+  }catch(htmlError){if(unavailable(htmlError))return null;throw htmlError}
+ }
+}
+async function creatorIndexArticleList(creator,disabledPinned,choose){
+ const candidates=new Map(),fingerprints=new Set();
+ let total=null,previousTime=Infinity,chronological=true;
+ for(let pageNo=1;;pageNo++){
+  const url='https://note.com/api/v2/creators/'+encodeURIComponent(creator.urlname)+'/contents?kind=note&page='+pageNo+'&disabled_pinned='+disabledPinned+'&with_notes=false';
+  const payload=await creatorIndexRead(()=>xhrJSON(url)),data=payload?.data;
+  if(!data||!Array.isArray(data.contents)&&!Array.isArray(data.notes))throw historySelectionError(creator,'公開記事一覧を取得できません');
+  const entries=contentList(payload),last=data.isLastPage??data.is_last_page;
+  const count=data.totalCount??data.total_count;
+  if(Number.isSafeInteger(count)&&count>=0){if(total!==null&&total!==count)throw historySelectionError(creator,'公開記事一覧が読み込み中に変わりました');total=count}
+  let boundary=null;
+  for(const [position,entry] of entries.entries()){
+   const note=entry?.note||entry;
+   if(creatorIndexHidden(note))continue;
+   const account=String(note?.user?.urlname||note?.author?.urlname||'').toLowerCase();
+   if(account&&account!==creator.urlname)continue;
+   const publicDate=Date.parse(note?.publishAt||note?.publish_at||note?.published_at||'');
+   if(publicDate>Date.now()+5000)continue;
+   const row=historyRawSelection(entry,creator);
+   candidates.set(row.key,row);
+   const pinFlags=[entry.isPinned,entry.is_pinned,note.isPinned,note.is_pinned];
+   const pinned=pinFlags.includes(true)||!disabledPinned&&pageNo===1&&position===0&&!pinFlags.includes(false);
+   if(!pinned){
+    if(publicDate>previousTime)chronological=false;
+    previousTime=publicDate;boundary=publicDate;
+   }
+  }
+  const end=last===true||last==null&&(entries.length===0&&pageNo>1||total!==null&&candidates.size>=total);
+  // The normal listing is newest-first. An old pinned candidate below this
+  // page's chronological boundary must wait until its true position is known.
+  const eligible=end?[...candidates.values()]:chronological&&boundary!==null?[...candidates.values()].filter(row=>Date.parse(row.publishAt)>=boundary):[];
+  const selected=await choose(eligible);
+  if(selected||end)return{rows:[...candidates.values()],total,selected};
+  if(!entries.length)throw historySelectionError(creator,'公開記事一覧の最終ページが未確認です');
+  const fingerprint=JSON.stringify(entries.map(entry=>String((entry?.note||entry)?.key||'')));
+  if(fingerprints.has(fingerprint))throw historySelectionError(creator,'公開記事一覧のページが繰り返されました');
+  fingerprints.add(fingerprint);
+ }
+}
+async function creatorIndexFeed(creator){
+ const xml=await creatorIndexRead(()=>xhr('https://note.com/'+encodeURIComponent(creator.urlname)+'/rss','text',30000));
+ const dom=new DOMParser().parseFromString(String(xml),'application/xml');
+ if(!dom.querySelector('rss > channel')||dom.querySelector('parsererror'))throw historySelectionError(creator,'公開RSSを確認できません');
+ return Array.from(dom.querySelectorAll('channel > item')).map(item=>{
+  const url=item.querySelector('link')?.textContent?.trim(),id=summaryIdentity(url);
+  if(id.account!==creator.urlname||!id.key)throw historySelectionError(creator,'公開RSSの記事の投稿者を確認できません');
+  const publishAt=item.querySelector('pubDate')?.textContent;
+  return historyRawSelection({key:id.key,noteUrl:url,name:item.querySelector('title')?.textContent,publishAt,user:{urlname:id.account}},creator);
+ });
+}
+async function creatorIndexLatest(creator,profilePromise){
+ let listing,rejected=false;
+ const listErrors=[];
+ const checked=new Set();
+ const choose=async rows=>{
+  const sorted=rows.sort((a,b)=>Date.parse(b.publishAt)-Date.parse(a.publishAt)||a.key.localeCompare(b.key));
+  for(const candidate of sorted){
+   if(checked.has(candidate.key))continue;
+   try{
+    const detail=await creatorIndexPublicDetail(candidate);
+    checked.add(candidate.key);
+    if(!detail)continue;
+    const verdict=page.__MUMEI_PROFILE_CARD_SAFETY__?.(candidate,detail);
+    if(!verdict)throw new Error('最新記事の検閲を開始できません');
+    if(!verdict.ok){rejected=true;continue}
+    return{row:historyBindChoice(candidate,'latest','latest'),detail};
+   }catch(error){error.creatorIndexCandidate=true;throw error}
+  }
+  return null;
+ };
+ try{listing=await creatorIndexArticleList(creator,true,choose)}catch(error){
+  if(error.creatorIndexCandidate||creatorIndexInterrupted(error)||[401,403,429].includes(creatorIndexHttpStatus(error))||creatorIndexRateLimitUntil>Date.now())throw error;
+  listErrors.push(error);
+ }
+ if(!listing?.selected){
+  let other;
+  try{other=await creatorIndexArticleList(creator,false,choose)}catch(error){
+   if(error.creatorIndexCandidate||creatorIndexInterrupted(error)||[401,403,429].includes(creatorIndexHttpStatus(error))||creatorIndexRateLimitUntil>Date.now())throw error;
+   listErrors.push(error);
+  }
+  if(other?.selected)return other.selected;
+  const profile=await profilePromise,count=profile?.noteCount??profile?.note_count;
+  if(listing?.total===0&&other?.total===0&&!(Number(count)>0))throw Object.assign(new Error('公開記事なし'),{code:'NO_PUBLIC_ARTICLE'});
+  if(listing&&other&&(listing.rows.length||other.rows.length)){
+   throw Object.assign(new Error(rejected?'公開記事はいずれも一般NGに該当':'取得できる公開記事なし'),{code:rejected?'ARTICLE_BLOCKED':'NO_PUBLIC_ARTICLE'});
+  }
+  let feed;
+  try{feed=await creatorIndexFeed(creator)}catch(error){
+   const missing=status=>status===404||status===410;
+   if(!profile&&listErrors.length===2&&listErrors.every(failure=>missing(creatorIndexHttpStatus(failure)))&&missing(creatorIndexHttpStatus(error)))throw Object.assign(new Error('公開クリエイターページと記事を取得できません（削除済み）'),{code:'NO_PUBLIC_ARTICLE'});
+   throw error;
+  }
+  const selected=await choose(feed);
+  if(selected)return selected;
+  throw listErrors[0]||historySelectionError(creator,'公開RSSと公開記事一覧を照合できません');
+ }
+ return listing.selected;
+}
+function creatorIndexThumbnailMissingEvidence(row,note){
+ return historyDetailMatches(row,note)&&!thumbnailUrl(note)&&!row.thumbUrl?{key:row.key,articleUrl:row.url,checkedAt:new Date().toISOString(),reason:'Verified public article has no configured eyecatch'}:null;
+}
+function creatorIndexProfileMissing(row){
+ const profile=row?.presentation;
+ return row?.creatorIndex===true&&row.creatorIndexProfileMissing===true&&row.profileText===''&&profile?.size==='thin'&&profile.content==='profile'&&profile.status==='unavailable'&&profile.text===''&&profile.source?.kind==='profile'&&profile.source.account===canonicalUrlname(row);
+}
+async function creatorIndexLoadProfile(id){
+ try{
+  const raw=await creatorIndexRead(()=>xhr('https://note.com/api/v2/creators/'+encodeURIComponent(id),'text',5000));
+  const payload=JSON.parse(String(raw)),profile=payload?.data?.creator||payload?.data?.user||payload?.data;
+  if(String(profile?.urlname||profile?.urlName||'').toLowerCase()===id)return profile;
+ }catch(error){if(creatorIndexInterrupted(error))throw error}
+ return null;
+}
+function creatorIndexResolvedProfile(id,profile,user){
+ const sameOwner=value=>String(value?.urlname||value?.urlName||'').toLowerCase()===id;
+ if(!sameOwner(user))throw historySelectionError(null,'公開記事の投稿者を確認できません');
+ if(!sameOwner(profile))return{...user,urlname:id};
+ const bioFields=['profile','description','bio','introduction','self_introduction','note_intro'];
+ if(bioFields.some(key=>Object.hasOwn(profile,key)))return{...profile,urlname:id};
+ return{...user,...profile,urlname:id};
+}
 async function preparePerson(person,requestedChoice='latest',creatorIndex=false){
  assertCreatorAllowed(person);
  const id=canonicalUrlname(person);
@@ -6584,34 +6762,30 @@ async function preparePerson(person,requestedChoice='latest',creatorIndex=false)
    actorUrl:String(person.actorUrl||('https://note.com/'+id)),actorImageUrl:mediaUrl(person.actorImageUrl||'')
   };
   const choice=requestedChoice;if(!historyChoiceValid(choice))throw historySelectionError(baseCreator,'記事選択条件が不明です');
-  const [selection,profilePayload]=await Promise.all([
+  const profileRequest=creatorIndex?creatorIndexLoadProfile(id):null;
+  const [selection,profilePayload]=await Promise.all(creatorIndex?[
+   creatorIndexLatest(baseCreator,profileRequest),profileRequest
+  ]:[
    historyCreatorArticle(baseCreator,choice),
    xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id))
   ]);
-  const profile=profilePayload?.data?.creator||profilePayload?.data?.user||profilePayload?.data||profilePayload||{};
   const selectedArticle=selection.row;
   if(!selectedArticle)throw new Error('公開記事を確認できません');
   historyAssertSelection(selectedArticle,null,'refresh');
-  const notePayload=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(selectedArticle.key)).catch(error=>{if(stopRequested||creatorIndex)throw error;return{}});
+  const notePayload=selection.detail||await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(selectedArticle.key)).catch(error=>{if(stopRequested||creatorIndex)throw error;return{}});
   if(stopRequested)throw new Error('停止しました');
   const detail=notePayload?.data||notePayload||{};
   if(summaryMismatch(selectedArticle,detail))throw historySelectionError(selectedArticle,'記事詳細の投稿者・記事IDが一致しません');
   const note=historyDetailMatches(selectedArticle,detail)?detail:{};
   const user=note.user||note.author||{};
-  if(creatorIndex){
-   const profileId=String(profile.urlname||profile.urlName||'').toLowerCase();
-   if(profileId!==id||!note.key)throw historySelectionError(selectedArticle,'公開記事・プロフィールの投稿者を照合できません');
-   const verdict=page.__MUMEI_PROFILE_CARD_SAFETY__?.(selectedArticle,note);
-   if(!verdict)throw new Error('最新記事の検閲を開始できません');
-   if(!verdict.ok)throw Object.assign(new Error(verdict.reason),{code:'ARTICLE_BLOCKED'});
-  }
+  const profile=creatorIndex?creatorIndexResolvedProfile(id,profilePayload,user):profilePayload?.data?.creator||profilePayload?.data?.user||profilePayload?.data||profilePayload||{};
 
   const biography=profileText(profile);
   // A missing profile is an ordinary skipped candidate, never a blocking error.
-  if(contentOptions?.content==='profile'&&!biography){const missing=new Error('プロフィール未設定');missing.code='PROFILE_UNAVAILABLE';throw missing;}
+  if(!creatorIndex&&contentOptions?.content==='profile'&&!biography){const missing=new Error('プロフィール未設定');missing.code='PROFILE_UNAVAILABLE';throw missing;}
   const avatar=avatarUrl(profile)||avatarUrl(user)||baseCreator.actorImageUrl||selectedArticle.actorImageUrl;
-  const thumb=thumbnailUrl(note)||selectedArticle.thumbUrl||await articleMetaImage(selectedArticle.url);
-  if(!thumb)throw new Error('記事サムネイルが未設定：'+id);
+  const thumb=thumbnailUrl(note)||selectedArticle.thumbUrl||(creatorIndex?'':await articleMetaImage(selectedArticle.url));
+  if(!thumb&&!creatorIndex)throw new Error('記事サムネイルが未設定：'+id);
 
   const result={
    ...selectedArticle,presentation:composePresentation(selectedArticle,note,profile),
@@ -6624,11 +6798,13 @@ async function preparePerson(person,requestedChoice='latest',creatorIndex=false)
    profileText:biography,
    profileLayout:'compact-v272',
    likesHistory:true,
-   ...(creatorIndex?{creatorIndex:true,creatorReading:[profile.nicknameKana,profile.nickname_kana,profile.nameKana,profile.name_kana,profile.furigana].find(value=>typeof value==='string'&&value.trim())||''}:{}),
+   ...(creatorIndex?{creatorIndex:true,creatorIndexProfileMissing:!biography,creatorIndexProfileSource:profilePayload?'creator-api':'verified-article-author',
+    articleThumbnailMissing:!thumb,thumbnailMissingEvidence:thumb?null:creatorIndexThumbnailMissingEvidence(selectedArticle,note),
+    creatorReading:[profile.nicknameKana,profile.nickname_kana,profile.nameKana,profile.name_kana,profile.furigana].find(value=>typeof value==='string'&&value.trim())||''}:{}),
    likedAt:String(person.likedAt||''),likedArticleKey:String(person.likedArticleKey||'')
   };
   if(['summary','opening'].includes(contentOptions?.content)&&(!historyPresentationMatches(result,result.presentation)||result.presentation?.content!==contentOptions.content))result.presentation={...result.presentation,size:contentOptions.size,content:contentOptions.content,status:'unavailable',text:''};
-  return qualityCall('acquired',[result,{target:id,note,profile,selected:selectedArticle}],result)
+  return qualityCall('acquired',[result,{target:id,note,profile,selected:selectedArticle,profileSource:result.creatorIndexProfileSource,articleSource:creatorIndexPublicPageDetails.has(note)?'public-note-page':'note-api'}],result)
  }catch(error){const failure=new Error(id+'さんの確認失敗：'+(error?.message||String(error)));if(error?.code)failure.code=error.code;throw failure}
 }
 function canonicalUrlname(person){
@@ -6702,7 +6878,7 @@ function validateCreatorIndexRows(rows){
  for(const [index,row] of rows.entries()){
   const key=row.creatorIndexKey,profile=row.presentation;
   const validName=String(row.creator||'').trim()&&key?.display===row.creator&&[0,1,2].includes(key.group)&&typeof key.key==='string';
-  const validProfile=profile?.size==='thin'&&profile.content==='profile'&&profile.status==='available'&&String(profile.text||'').trim()&&String(row.profileText||'').trim()&&profile.source?.account===canonicalUrlname(row);
+  const validProfile=creatorIndexProfileMissing(row)||profile?.size==='thin'&&profile.content==='profile'&&profile.status==='available'&&String(profile.text||'').trim()&&String(row.profileText||'').trim()&&profile.source?.account===canonicalUrlname(row);
   if(!row.creatorIndex||row.finalMarker||row.index!==index+1||!validName||!validProfile||row.historyArticleChoice!=='latest')throw new Error('目次用の見出し・最新記事・プロフィールの記録が不完全です');
   historyAssertSelection(row,null,'images');
   if(index&&compareCreatorIndexRows(rows[index-1],row)>0)throw new Error('目次用のクリエイター名の並び順を確認できません');
@@ -6756,11 +6932,36 @@ async function buildRows(target=300,selection=null){
  let accepted=0;
  const validCheckpoint=Number.isInteger(index)&&index===rows.length+skipped.length&&index<=people.length&&rows.length<=target&&uniquePeople([...rows,...skipped],creatorIndex).length===index&&skipped.every(person=>String(person.reason||'').trim())&&people.slice(0,index).every(person=>skipped.some(entry=>sameCreator(entry,person))||sameCreator(rows[accepted++],person))&&accepted===rows.length;
  if(!validCheckpoint)throw new Error('確認途中の保存データに重複・順序の不一致があります。スキ履歴を取得し直してください');
+ let legacyRetry=[];
+ if(creatorIndex&&compatible&&saved.creatorIndexCoverage!==2){
+  const priorFailures=saved.creatorIndexRetry||[...skipped,...(readRun()?.imageSkipped||[])];
+  legacyRetry=people.slice(0,index).filter(person=>!excludedCreator(person)&&priorFailures.some(other=>sameCreator(person,other)));
+ }
  const checkpoint=async()=>{
-  writePrep({signature,index,rows,skipped,choice,historyFilter:bridge.historyFilter||null,...(creatorIndex?{creatorIndex:true,creatorIndexBridge:bridge}:{}),...(selection?.articleLikesDirect?{articleLikes:bridge}:{}),presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content}:null,updatedAt:Date.now()});
+  writePrep({signature,index,rows,skipped,choice,historyFilter:bridge.historyFilter||null,...(creatorIndex?{creatorIndex:true,creatorIndexBridge:bridge,...(legacyRetry.length?{creatorIndexRetry:legacyRetry.map(person=>({urlname:person.urlname,likerKey:creatorKey(person)}))}:{creatorIndexCoverage:2})}:{}),...(selection?.articleLikesDirect?{articleLikes:bridge}:{}),presentationOptions:contentOptions?{size:contentOptions.size,content:contentOptions.content}:null,updatedAt:Date.now()});
   await flushPrepBackup();
  };
- if(!compatible||saved.signature!==signature||removed.length)await checkpoint();
+ while(legacyRetry.length){
+  checkPause();if(stopRequested)throw new Error('停止しました');
+  const batch=legacyRetry.slice(0,8);
+  setStatus('前回掲載できなかったクリエイターを再確認｜残り '+legacyRetry.length+'人');
+  const results=await Promise.allSettled(batch.map(person=>preparePerson(person,'latest',true)));
+  const refreshed=[],excluded=[];
+  for(const [at,result] of results.entries()){
+   const person=batch[at];
+   if(result.status==='fulfilled'&&sameCreator(result.value,person)){refreshed.push(result.value);continue}
+   const error=result.status==='rejected'?result.reason:new Error('再確認した記事の投稿者が一致しません');
+   if(!['NO_PUBLIC_ARTICLE','ARTICLE_BLOCKED','CREATOR_EXCLUDED'].includes(error?.code))throw error;
+   excluded.push({urlname:person.urlname,likerKey:creatorKey(person),code:error.code,reason:error.message});
+  }
+  checkPause();if(stopRequested)throw new Error('停止しました');
+  const retained=rows.filter(row=>!batch.some(person=>sameCreator(person,row))).concat(refreshed);
+  rows=people.slice(0,index).map(person=>retained.find(row=>sameCreator(row,person))).filter(Boolean);
+  skipped=skipped.filter(row=>!batch.some(person=>sameCreator(person,row))).concat(excluded);
+  legacyRetry=legacyRetry.slice(batch.length);
+  await checkpoint();
+ }
+ if(!compatible||saved.signature!==signature||removed.length||creatorIndex&&saved.creatorIndexCoverage!==2)await checkpoint();
 
  while(index<people.length&&rows.length<target){
   if(stopRequested)throw new Error('停止しました');
@@ -6775,7 +6976,7 @@ async function buildRows(target=300,selection=null){
    const result=results[position],person=batch[position];
    if(result.status==='fulfilled'&&result.value&&sameCreator(result.value,person)){prepared.push(result.value);continue}
    const error=result.status==='rejected'?result.reason:new Error('公開記事・クリエイター情報を確認できません');
-   if(creatorIndex&&(/GET (?:401|403|408|429|5\d\d)\b|JSON解析失敗|検閲を開始できません/.test(error.message)||['REQUEST_FAILED','REQUEST_TIMEOUT','REQUEST_ABORTED','PAUSED'].includes(error.code)))throw error;
+   if(creatorIndex&&!['NO_PUBLIC_ARTICLE','ARTICLE_BLOCKED','CREATOR_EXCLUDED'].includes(error.code))throw error;
    rejected.push({urlname:canonicalUrlname(person),likerKey:creatorKey(person),code:error?.code||'',reason:error?.code==='NO_PUBLIC_ARTICLE'?'公開記事なし':String(error?.message||error)})
   }
   if(uniquePeople([...rows,...prepared,...skipped,...rejected],creatorIndex).length!==rows.length+prepared.length+skipped.length+rejected.length)throw new Error('クリエイターの重複を検出しました。スキ履歴を取得し直してください');
@@ -7469,22 +7670,39 @@ function drawHistoryCard(ctx,index,row,avatar,thumb){
  ctx.fillStyle=theme.panel;rounded(ctx,ix,iy,iw,ih,8);ctx.fill();ctx.strokeStyle=theme.line;ctx.lineWidth=1;rounded(ctx,ix,iy,iw,ih,8);ctx.stroke();
 }
 function galleryAssetUrl(value,width){return resizedNoteArtwork(value,width,width===720)}
+// A deleted artwork URL does not invalidate its article. Use the original
+// resolution before falling back, and propagate temporary failures for retry.
+async function creatorIndexBitmap(source,original){
+ if(!source)return null;
+ const urls=Array.from(new Set([source,original].filter(Boolean)));
+ for(const url of urls){
+  try{
+   const image=await continuousBitmap(url);
+   if(image)return image;
+  }catch(error){
+   if(!/^(?:GET (?:404|410)\b|画像読込失敗$)/.test(error?.message||''))throw error;
+  }
+ }
+ return null;
+}
 async function makeFile(row){
  const profileOnly=confirmedGalleryProfileOnly(row);
  if(row.profileOnly===true&&!profileOnly){const error=new Error('公開記事なしの参加者確認記録が一致しません');error.code='PROFILE_ONLY_UNVERIFIED';throw error;}
- const avatarRequired=Boolean(mediaUrl(row.actorImageUrl)),thumbnailMissing=profileOnly||confirmedGalleryThumbnailMissing(row);
+ const avatarRequired=Boolean(mediaUrl(row.actorImageUrl)),thumbnailMissing=profileOnly||confirmedGalleryThumbnailMissing(row)||Boolean(row.creatorIndex&&row.articleThumbnailMissing&&row.key&&row.thumbnailMissingEvidence?.key===row.key&&row.url&&row.thumbnailMissingEvidence?.articleUrl===row.url);
  const avatarSource=galleryAssetUrl(row.actorImageUrl,160),thumbSource=galleryAssetUrl(row.thumbUrl,720);
- const images=await Promise.allSettled([avatarRequired?continuousBitmap(avatarSource):Promise.resolve(null),thumbnailMissing?Promise.resolve(null):continuousBitmap(thumbSource)]);
+ if(row.creatorIndex&&!thumbSource&&!thumbnailMissing)throw new Error('記事画像の取得状態を確認できません。対象を保持して再確認します');
+ const load=row.creatorIndex?creatorIndexBitmap:continuousBitmap;
+ const images=await Promise.allSettled([avatarRequired?load(avatarSource,row.actorImageUrl):Promise.resolve(null),thumbnailMissing?Promise.resolve(null):load(thumbSource,row.thumbUrl)]);
  const [avatar,thumb]=images.map(result=>result.status==='fulfilled'?result.value:null);
  const avatarUnavailable=avatarRequired&&!avatar;
- if(row.finalMarker)row.renderAssetStatus={avatar:avatar?'loaded':avatarRequired?'failed':'missing',thumbnail:thumb?'loaded':mediaUrl(row.thumbUrl)?'failed':'missing'};
- if(!row.finalMarker&&(avatarUnavailable||!thumb&&!thumbnailMissing)){
+ if(row.creatorIndex){
+  const failure=images.find(result=>result.status==='rejected');
+  if(failure){try{avatar?.close?.();thumb?.close?.()}catch{}throw failure.reason;}
+ }
+ if(row.finalMarker||row.creatorIndex)row.renderAssetStatus={avatar:avatar?'loaded':avatarRequired?'failed':'missing',thumbnail:thumb?'loaded':mediaUrl(row.thumbUrl)?'failed':'missing'};
+ if(!row.finalMarker&&!row.creatorIndex&&(avatarUnavailable||!thumb&&!thumbnailMissing)){
   try{avatar?.close?.();thumb?.close?.()}catch{}
   const failures=images.filter(result=>result.status==='rejected').map(result=>result.reason),reason=failures[0]?.message;
-  if(row.creatorIndex){
-   const transient=failures.find(error=>/GET (?:401|403|408|429|5\d\d)\b|タイムアウト|停止しました/.test(error?.message)||['REQUEST_FAILED','REQUEST_TIMEOUT','REQUEST_ABORTED','PAUSED'].includes(error?.code));
-   if(transient)throw transient;
-  }
   const error=new Error(row.creator+'さん：'+(avatarUnavailable?'アイコン':'記事サムネイル')+'を表示できません'+(reason?'（'+reason+'）':''));
   error.code='ASSET_UNAVAILABLE';throw error;
  }
@@ -7530,6 +7748,12 @@ async function makeFile(row){
 
  }
  const contrastLayout=row.gallery126===true?{...galleryDesign(index).layout,profileOnly}:historyDesign(index).layout;
+ if(row.creatorIndex&&!thumb){
+  const [x,y,w,h]=contrastLayout.thumb;
+  ctx.save();ctx.fillStyle=theme.panel;ctx.fillRect(x+2,y+2,w-4,h-4);
+  ctx.fillStyle=theme.muted;ctx.font='700 22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('note',x+w/2,y+h/2);ctx.restore();
+ }
  const outputCanvas=finishThinPresentation(canvas,row,avatar,thumb,theme,contrastLayout);
  renderArticleArtwork(outputCanvas,thumb,outputCanvas.height===MEDIUM_THUMBNAIL_HEIGHT?MEDIUM_ARTICLE_FRAME:contrastLayout.thumb);
  try{avatar?.close?.()}catch{}
@@ -7910,6 +8134,7 @@ async function resumeFixed300(){
   const view=findView();if(view&&!readRun()?.magazineCardsOnly&&!readRun()?.creatorIndex)await repairTrackedRawFormulas(view);
   const run=readRun();
   if(run?.purchasedReview){setStatus('この保存分は購入記事紹介の専用版で再開してください',true);return;}
+  if(run?.creatorIndex&&(run.creatorIndexCoverage!==2||run.creatorIndexHasGaps))return createFixed300();
   const resumeCards=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;
   if(run?.magazineCardsOnly&&typeof resumeCards==='function')return resumeCards({resume:!run.awaitingInsertion,magazineSource:run.sources});
   if(hasCardProgress(run)&&!run.rows.some(summaryNeedsRefresh)&&!galleryNeedsParticipantUpgrade(run)&&typeof resumeCards==='function')return resumeCards({resume:true});
@@ -8336,18 +8561,43 @@ function inspectCreatorIndexRender(view,pos,formula){
 }
 function assertCreatorIndexEntry(view,row,hit,run){
  const doc=view.state.doc,resolved=doc.resolve(hit.pos),index=resolved.index(0),image=doc.nodeAt(hit.pos);
- const heading=index>=2?doc.child(index-2):null,profile=index>=1?doc.child(index-1):null;
+ const hasProfile=!creatorIndexProfileMissing(row),offset=hasProfile?2:1;
+ const heading=index>=offset?doc.child(index-offset):null,profile=hasProfile&&index>=1?doc.child(index-1):null;
  const rule=doc.nodeAt(hit.pos+(image?.nodeSize||0)),url=norm(row.url),text=run.presentationTexts?.[url],layout=run.presentationLayouts?.[url];
  if(!image||resolved.depth!==0||image.type.name!=='image'||!remoteImage(image)||norm(image.attrs.link)!==url||image.textContent!=='')throw new Error(row.creator+'の画像または空のキャプションを確認できません');
  if(heading?.type.name!=='heading'||heading.attrs.level!==2||heading.textContent!==row.creator||!rule||rule.type!==dividerType(view))throw new Error(row.creator+'の見出し・区切り線を確認できません');
- if(!layout||!text||profile?.type.name!=='paragraph'||profile.textContent!==text)throw new Error(row.creator+'のプロフィール段落が一致しません');
- const expected=contentApi.aboveLayout(row,layout.bodyWidthPx,layout.fontBasePx);
- verifyCreatorIndexFormula(row,text,expected);
- const profilePos=hit.pos-profile.nodeSize;
- inspectCreatorIndexRender(view,profilePos,text);
- return{from:profilePos-heading.nodeSize,nextPos:hit.pos+image.nodeSize+rule.nodeSize,profilePos};
+ let profilePos=null;
+ if(hasProfile){
+  if(!layout||!text||profile?.type.name!=='paragraph'||profile.textContent!==text)throw new Error(row.creator+'のプロフィール段落が一致しません');
+  const expected=contentApi.aboveLayout(row,layout.bodyWidthPx,layout.fontBasePx);
+  verifyCreatorIndexFormula(row,text,expected);
+  profilePos=hit.pos-profile.nodeSize;
+  inspectCreatorIndexRender(view,profilePos,text);
+ }else if(text!=null||layout!=null||run.presentationPositions?.[url]!=null)throw new Error(row.creator+'のプロフィール記録と本文が一致しません');
+ return{from:(profilePos??hit.pos)-heading.nodeSize,nextPos:hit.pos+image.nodeSize+rule.nodeSize,profilePos};
 }
 function auditCreatorIndex(view,run){
+ if(run.creatorIndexHasGaps){
+  const byUrl=new Map(run.rows.map((row,index)=>[norm(row.url),index])),sections=new Map();
+  validateContinuousImageIds(view,run.items);
+  const images=ownedImagesForRun(view,run);
+  if(images.length!==run.items.length)throw new Error('掲載済みの画像を途中記録と照合できません');
+  let lastIndex=-1,lastEnd=null;
+  for(const hit of images){
+   const index=byUrl.get(norm(hit.node.attrs.link));
+   if(!Number.isInteger(index)||index<=lastIndex)throw new Error('掲載済みの見出し順が変更されています。本文を保持しました');
+   const entry=assertCreatorIndexEntry(view,run.rows[index],hit,run);
+   if(lastEnd!==null&&entry.from!==lastEnd){
+    const pending=run.pendingCreatorIndex,pendingIndex=byUrl.get(norm(pending?.url));
+    if(!pending||pending.pos!==lastEnd||!(pendingIndex>lastIndex&&pendingIndex<index)||entry.from<lastEnd)throw new Error('掲載済みの見出しの間に編集された本文があります。本文を保持しました');
+   }
+   sections.set(index,entry);lastIndex=index;lastEnd=entry.nextPos;
+  }
+  let count=0;while(sections.has(count))count++;
+  const first=sections.values().next().value;
+  const nextPos=count?sections.get(count-1).nextPos:run.pendingCreatorIndex?.pos??first?.from??run.imageAnchorPos;
+  return{count,nextPos,sections};
+ }
  const images=ownedImagesForRun(view,run),count=completedImagePrefix(run.rows,images,run);
  let previous=null;
  for(let index=0;index<count;index++){
@@ -8366,9 +8616,12 @@ function finishCreatorIndexEntry(view,row,hit,pending){
  if(!run?.creatorIndex||run.articleKey!==editorArticleKey()||run.pendingCreatorIndex?.url!==row.url)throw new Error('プロフィールの貼り付け記録が変更されました');
  const beforeIds=new Set(pending.beforeIds),id=String(hit.node.attrs.id||'');
  if(!id||beforeIds.has(id)||!remoteImage(hit.node)||doc.nodeAt(hit.pos)!==hit.node)throw new Error('今回のアップロード画像を特定できません');
- const url=norm(row.url),text=pending.text,layout=pending.layout;
- verifyCreatorIndexFormula(row,text,contentApi.aboveLayout(row,layout.bodyWidthPx,layout.fontBasePx));
- const planned={...run,presentationTexts:{...run.presentationTexts,[url]:text},presentationLayouts:{...run.presentationLayouts,[url]:layout}};
+ const url=norm(row.url),text=pending.text,layout=pending.layout,hasProfile=!creatorIndexProfileMissing(row);
+ if(hasProfile){
+  if(!layout||!text)throw new Error(row.creator+'のプロフィールの途中記録がありません');
+  verifyCreatorIndexFormula(row,text,contentApi.aboveLayout(row,layout.bodyWidthPx,layout.fontBasePx));
+ }else if(layout!==null||text!==null)throw new Error(row.creator+'のプロフィールの途中記録が一致しません');
+ const planned=hasProfile?{...run,presentationTexts:{...run.presentationTexts,[url]:text},presentationLayouts:{...run.presentationLayouts,[url]:layout}}:run;
  let linkedHit=hit;
  // On resume the editor can already contain the whole transaction while its
  // checkpoint still says "uploading". Verify the block in place in that case.
@@ -8382,12 +8635,12 @@ function finishCreatorIndexEntry(view,row,hit,pending){
   if(!indexTrailingMatches(view,doc.nodeAt(end),pending.tail))throw new Error('アップロード中に本文が変更されました。完成分は保持しました');
   const schema=view.state.schema,small=schema.marks.small;
   const heading=schema.nodes.heading.create({level:2},schema.text(row.creator));
-  const profile=schema.nodes.paragraph.create(null,schema.text(text,small?[small.create()]:[]));
+  const profile=hasProfile?schema.nodes.paragraph.create(null,schema.text(text,small?[small.create()]:[])):null;
   const image=hit.node.type.create({...hit.node.attrs,link:row.url},null,hit.node.marks);
   const rule=dividerType(view)?.createAndFill();
   if(!rule)throw new Error('noteの区切り線を取得できません');
-  const transaction=view.state.tr.replaceWith(anchor,end,[heading,profile,image,rule]);
-  const imagePos=anchor+heading.nodeSize+profile.nodeSize;
+  const transaction=view.state.tr.replaceWith(anchor,end,profile?[heading,profile,image,rule]:[heading,image,rule]);
+  const imagePos=anchor+heading.nodeSize+(profile?.nodeSize||0);
   if(!transaction.doc.nodeAt(imagePos)?.eq(image))throw new Error('見出し・プロフィール・画像の挿入位置を確認できません');
   view.dispatch(transaction);
   linkedHit={pos:imagePos,node:view.state.doc.nodeAt(imagePos)};
@@ -8395,13 +8648,17 @@ function finishCreatorIndexEntry(view,row,hit,pending){
  const checked=assertCreatorIndexEntry(view,row,linkedHit,planned);
  if(checked.from!==pending.pos)throw new Error('区切り線の後の貼り付け位置を確認できません');
  const record={id,src:linkedHit.node.attrs.src,url,creator:row.creator,at:Date.now()};
- writeRun({...planned,items:[...run.items,record],sectionHeadings:[...run.sectionHeadings,row.creator],activityTexts:[...run.activityTexts,text],
-  presentationPositions:{...run.presentationPositions,[url]:checked.profilePos},dividerUrls:[...(run.dividerUrls||[]),row.url],pendingCreatorIndex:null,updatedAt:Date.now()});
+ const shift=pos=>Number.isInteger(pos)&&pos>=checked.from?pos+checked.nextPos-checked.from:pos;
+ const positions=run.creatorIndexHasGaps?Object.fromEntries(Object.entries(run.presentationPositions||{}).map(([key,pos])=>[key,shift(pos)])):{...run.presentationPositions};
+ if(hasProfile)positions[url]=checked.profilePos;
+ writeRun({...planned,items:[...run.items,record],sectionHeadings:[...run.sectionHeadings,row.creator],presentationPositions:positions,
+  ...(run.creatorIndexHasGaps?{cardAnchorPos:shift(run.cardAnchorPos),pendingCard:run.pendingCard?{...run.pendingCard,pos:shift(run.pendingCard.pos)}:run.pendingCard}:{}),
+  ...(hasProfile?{activityTexts:[...run.activityTexts,text]}:{}),dividerUrls:[...(run.dividerUrls||[]),row.url],pendingCreatorIndex:null,updatedAt:Date.now()});
  return{...checked,hit:linkedHit};
 }
-async function pasteCreatorIndex(view,run){
+async function pasteCreatorIndex(view,run,finishPendingOnly=false){
  let {rows}=run;
- let {count,nextPos}=auditCreatorIndex(view,run);
+ let {count,nextPos,sections}=auditCreatorIndex(view,run);
  if(!Number.isInteger(nextPos)||nextPos<0||nextPos>view.state.doc.content.size)throw new Error('目次用の挿入位置を確認できません');
  if(!qualityAvailable())throw new Error('品質検査を有効にして「再開」を押してください');
  const prepare=row=>({url:row.url,promise:makeFile(row).then(file=>({file}),error=>({error}))});
@@ -8434,20 +8691,18 @@ async function pasteCreatorIndex(view,run){
   if(!previousUpload){
    setStatus('極薄を準備中｜'+row.creator+'｜'+(count+1)+'/'+rows.length);
    const result=await(prepared?.url===row.url?prepared:prepare(row)).promise;prepared=null;
-   if(result.error){
-    if(result.error.code!=='ASSET_UNAVAILABLE')throw result.error;
-    const next=rows.filter((_,index)=>index!==count).map((entry,index)=>({...entry,index:index+1}));
-    if(!next.length)throw result.error;
-    rows=validateCreatorIndexRows(next);
-    run=readRun();writeRun({...run,rows,count:rows.length,imageSkipped:[...(run.imageSkipped||[]),{urlname:row.urlname,reason:result.error.message}],updatedAt:Date.now()});await flushRunBackup();continue;
-   }
+   if(result.error)throw result.error;
    file=result.file;
    await qualityGate(row,file,'images');
-   const context=contentApi.presentationContext(view),layout=contentApi.aboveLayout(row,context.bodyWidthPx,context.fontBasePx);
-   verifyCreatorIndexFormula(row,layout.text,layout);
+   let layout=null;
+   if(!creatorIndexProfileMissing(row)){
+    const context=contentApi.presentationContext(view);
+    layout=contentApi.aboveLayout(row,context.bodyWidthPx,context.fontBasePx);
+    verifyCreatorIndexFormula(row,layout.text,layout);
+   }
    if(!dividerType(view)||!view.state.schema.nodes.heading)throw new Error('noteの見出し・区切り線を取得できません');
    const before=imageNodes(view).map(hit=>String(hit.node.attrs.id||'')).filter(Boolean),tail=view.state.doc.nodeAt(nextPos)?.toJSON()||null;
-   pending={url:row.url,pos:nextPos,beforeIds:before,tail,page:creatorIndexPage,text:layout.text,layout:contentApi.layoutContract(layout)};
+   pending={url:row.url,pos:nextPos,beforeIds:before,tail,page:creatorIndexPage,text:layout?.text??null,layout:layout?contentApi.layoutContract(layout):null};
    const initialDoc=view.state.doc;
    writeRun({...readRun(),pendingCreatorIndex:pending});await flushRunBackup();
    if(stopRequested||pauseRequested){writeRun({...readRun(),pendingCreatorIndex:null});await flushRunBackup();checkPause();throw new Error('停止しました')}
@@ -8465,7 +8720,8 @@ async function pasteCreatorIndex(view,run){
      if(view.state.doc===anchorDoc&&view.state.doc.nodeAt(nextPos)===placeholder){view.dispatch(view.state.tr.delete(nextPos,nextPos+placeholder.nodeSize));writeRun({...readRun(),pendingCreatorIndex:null});await flushRunBackup()}
      throw error;
     }
-    if(count+1<rows.length)prepared=prepare(rows[count+1]);
+    let next=count+1;while(sections?.has(next))next++;
+    if(!finishPendingOnly&&next<rows.length)prepared=prepare(rows[next]);
     previousUpload=await waitNewNoteImage(view,new Set(before));
     pending={...pending,id:String(previousUpload.node.attrs.id)};
     writeRun({...readRun(),pendingCreatorIndex:pending});await flushRunBackup();
@@ -8475,16 +8731,55 @@ async function pasteCreatorIndex(view,run){
   const entry=finishCreatorIndexEntry(view,row,previousUpload,pending);
   if(file)qualityCall('pasted',[row,file,{hit:entry.hit}]);
   await flushRunBackup();
-  inspectCreatorIndexRender(view,entry.profilePos,pending.text);
+  if(entry.profilePos!==null)inspectCreatorIndexRender(view,entry.profilePos,pending.text);
+  if(finishPendingOnly)return;
   nextPos=entry.nextPos;count++;
+  while(sections?.has(count)){const section=sections.get(count++);nextPos+=section.nextPos-section.from}
  }
  run=readRun();
  if(auditCreatorIndex(view,run).count!==rows.length)throw new Error('本文と目次の最終照合が完了していません');
- writeRun({...run,stage:'images_ready',paused:false,pauseStage:null,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+ if(run.creatorIndexHasGaps){
+  const records=new Map(run.items.map(item=>[norm(item.url),item]));
+  run={...run,items:rows.map(row=>records.get(norm(row.url))),sectionHeadings:rows.map(row=>row.creator),activityTexts:rows.map(row=>run.presentationTexts?.[norm(row.url)]).filter(Boolean),dividerUrls:rows.map(row=>row.url)};
+ }
+ writeRun({...run,creatorIndexHasGaps:false,stage:'images_ready',paused:false,pauseStage:null,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
  await flushRunBackup();
  const saved=await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__?.('目次用の本文を下書き保存中…');
  const prep=readPrep(),skipped=(prep?.skipped?.length||0)+(run.imageSkipped?.length||0);
  setStatus('本文を照合｜掲載 '+count+'人'+(skipped?'｜除外 '+skipped+'人':'')+(saved===true||saved?.confirmed?'｜下書き保存済み':'｜下書き保存は未確認'));
+}
+async function recoverLegacyCreatorIndex(view,run,requested){
+ if(run.creatorIndexCoverage===2)return run;
+ if(run.pendingCreatorIndex){
+  await pasteCreatorIndex(view,run,true);
+  run=readRun();
+ }
+ validateCreatorIndexRows(run.rows);
+ auditCreatorIndex(view,run);
+ const original=view.state.doc,draftKey=editorArticleKey();
+ let prep=readPrep();
+ if(!prep?.creatorIndexBridge){
+  await prepareLikesHistoryExport(requested);
+  prep=readPrep();
+ }
+ if(!prep?.creatorIndexBridge||!sameHistoryFilter(prep.historyFilter,run.historyFilter))throw new Error('前回と同じ期間のスキ履歴を確認できません');
+ const covered=uniquePeople(prep.creatorIndexBridge.people,true);
+ if(!covered.length)throw new Error('保存済みのスキ履歴が空です');
+ let rows=run.rows;
+ if(!covered.every(person=>rows.some(row=>sameCreator(row,person)))){
+  const reviewed=await buildRows(Infinity,requested);
+  const additions=reviewed.filter(row=>!rows.some(saved=>sameCreator(saved,row)));
+  if(additions.length)rows=validateCreatorIndexRows([...rows,...additions].sort(compareCreatorIndexRows).map((row,index)=>({...row,index:index+1})));
+ }
+ if(view.state.doc!==original||draftKey!==editorArticleKey()||readRun()?.createdAt!==run.createdAt)throw new Error('再確認中に下書きが変わりました。本文を保存して「再開」を押してください');
+ const revised={...run,rows,count:rows.length,imageSkipped:[],creatorIndexCoverage:2,creatorIndexHasGaps:rows!==run.rows&&run.items.length>0};
+ if(revised.creatorIndexHasGaps){
+  const {sections}=auditCreatorIndex(view,revised),positions={};
+  for(const [index,entry] of sections)if(entry.profilePos!==null)positions[norm(rows[index].url)]=entry.profilePos;
+  revised.presentationPositions=positions;
+ }
+ writeRun(revised);await flushRunBackup();
+ return readRun();
 }
 async function createFixed300(options=null){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
@@ -8531,6 +8826,7 @@ async function createFixed300(options=null){
   if(creatorIndex){
    if(!editorArticleKey())throw new Error('下書きの保存先を確認できません。保存して編集画面を開き直してください');
    contentOptions={size:'thin',content:'profile'};
+   if(existing?.creatorIndex)existing=await recoverLegacyCreatorIndex(view,existing,requested);
   }
   let rows;
   if(existing?.gallery126)rows=validateGalleryRows(existing.rows);
@@ -8577,7 +8873,7 @@ async function createFixed300(options=null){
     cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
     cardBaselineNodes:gallery?embedNodes(view).map(hit=>({key:cardKey(hit),src:String(hit.node.attrs?.src||''),json:hit.node.toJSON?.()||null})):[],
     imageBaselineRecords:imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})),
-    createdAt:Date.now(),stage:'images_building',likesHistory:!gallery,likesHistoryFix230:!gallery,gallery126:gallery,galleryAvailableOnly:false,pendingPeople:[],...(gallery?{galleryProfileTexts:{}}:{}),
+    createdAt:Date.now(),stage:'images_building',likesHistory:!gallery,likesHistoryFix230:!gallery,gallery126:gallery,galleryAvailableOnly:false,pendingPeople:[],...(gallery?{galleryProfileTexts:{}}:{}),...(creatorIndex?{creatorIndexCoverage:2}:{}),
     imageAnchorPos:gallery?initialAnchor:cardAnchorFromSelection(view),sources:gallery?galleryManifest().source:'スキ履歴（読み取りのみ）',mode:requested.mode,creatorIndex,count:creatorIndex?rows.length:gallery?galleryCount:rows.length-1,historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,historyFilter:!gallery?requested.historyFilter||null:null,articleLikesDirect:!gallery&&requested.articleLikesDirect===true,choice:gallery?'oldest':historyArticleChoice(requested.choice)
    };
    writeRun(run)
@@ -8943,21 +9239,27 @@ async function qualityRetryHeldRun(run){
   // A profile-only participant has no article endpoint. Its existing verified
   // no-article evidence remains required, together with the fresh profile ID.
   const [notePayload,profilePayload]=await Promise.all([
-   original.profileOnly?Promise.resolve(null):xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(original.key)),
-   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(original.urlname))
+   original.creatorIndex?creatorIndexPublicDetail(original):original.profileOnly?Promise.resolve(null):xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(original.key)),
+   original.creatorIndex?creatorIndexLoadProfile(id):xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(original.urlname))
   ]);
-  const note=notePayload?.data||notePayload||null;
-  const profile=profilePayload?.data?.creator||profilePayload?.data?.user||profilePayload?.data||profilePayload||null;
+  const note=notePayload?.data||notePayload||null,user=note?.user||note?.author||{};
+  const profile=original.creatorIndex?creatorIndexResolvedProfile(id,profilePayload,user):profilePayload?.data?.creator||profilePayload?.data?.user||profilePayload?.data||profilePayload||null;
   if(!profile||typeof profile!=='object'||account(profile.urlname||profile.urlName)!==id||!String(profile.nickname||profile.name||'').trim())return await blocked();
-  const user=note?.user||note?.author||{};
+  if(original.creatorIndex&&page.__MUMEI_PROFILE_CARD_SAFETY__?.(original,note)?.ok!==true)return await blocked();
   if(!original.profileOnly&&(!note||typeof note!=='object'||String(note.key||'').toLowerCase()!==key||account(user.urlname||user.urlName)!==id))return await blocked();
   if(!original.profileOnly&&(note.noteUrl||note.url)&&!sameIdentity(noteIdentity(note.noteUrl||note.url),{account:id,key}))return await blocked();
   if(!original.profileOnly&&!['name','title'].some(field=>Object.prototype.hasOwnProperty.call(note,field)))return await blocked();
   const profileFields=['profile','description','bio','introduction','self_introduction','note_intro'];
   const hasProfileText=Object.prototype.hasOwnProperty.call(original,'profileText');
   if(hasProfileText&&typeof original.profileText!=='string')return await blocked();
-  if(hasProfileText&&!profileFields.some(field=>Object.prototype.hasOwnProperty.call(profile,field)))return await blocked();
-  const biography=profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
+  const hasBiography=profileFields.some(field=>Object.prototype.hasOwnProperty.call(profile,field));
+  if(hasProfileText&&!hasBiography&&!original.creatorIndex)return await blocked();
+  // Keep independently attributable saved text if both fresh same-owner sources
+  // omit their bio fields. A disputed profile itself must come from fresh data.
+  const previousProfile=original.presentation?.source;
+  const retainBio=original.creatorIndex&&!hasBiography&&Boolean(original.profileText)&&previousProfile?.kind==='profile'&&account(previousProfile.account)===id&&
+   !(hold.reasons||[]).some(reason=>/PROFILE|PRESENTATION/.test(reason.code));
+  const biography=retainBio?original.profileText:profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
   if(original.gallery126&&hasProfileText&&typeof biography!=='string')return await blocked();
   if(original.profileOnly){
    const proof=original.noPublicArticleEvidence,profileUrl='https://note.com/'+id;
@@ -8970,7 +9272,8 @@ async function qualityRetryHeldRun(run){
   const actorImageUrl=editorSource?(avatar(profile)||avatar(user)):(mediaUrl(user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||'')||mediaUrl(profile.user_profile_image_url||profile.profile_image_url||profile.profileImageUrl||profile.user_profile_image_path||profile.profile_image_path||profile.profileImagePath||profile.icon_url||profile.image_url||''));
   let thumbUrl=original.profileOnly?'':editorSource?editorThumb(note):coreThumb(note),thumbnailMissingEvidence=null;
   if(!original.profileOnly&&!thumbUrl){
-   if(original.gallery126&&Object.prototype.hasOwnProperty.call(note,'eyecatch')&&(note.eyecatch===null||note.eyecatch==='')){
+   if(original.creatorIndex)thumbnailMissingEvidence=creatorIndexThumbnailMissingEvidence({...original,thumbUrl:''},note);
+   else if(original.gallery126&&Object.prototype.hasOwnProperty.call(note,'eyecatch')&&(note.eyecatch===null||note.eyecatch==='')){
     thumbnailMissingEvidence={key:original.key,articleUrl:original.url,checkedAt:new Date().toISOString(),reason:'The verified article API reports an unconfigured eyecatch'};
    }else thumbUrl=mediaUrl(await articleMetaImage(original.url));
   }
@@ -8981,19 +9284,30 @@ async function qualityRetryHeldRun(run){
   let pending={...original,creator:editorSource&&original.finalMarker?freshCreator:freshCreator.trim(),actorImageUrl,thumbUrl,title:original.profileOnly?original.title:String(note.name||note.title||'無題の記事').trim()};
   if(editorSource||Object.prototype.hasOwnProperty.call(original,'avatarMissing'))pending.avatarMissing=!actorImageUrl;
   if(hasProfileText){
-   if(original.gallery126)pending.profileText=biography.replace(/\r\n?/g,'\n').trim();
+   if(retainBio)pending.profileText=original.profileText;
+   else if(original.gallery126)pending.profileText=biography.replace(/\r\n?/g,'\n').trim();
    else{
     const doc=new DOMParser().parseFromString(String(biography).replace(/<br\s*\/?\s*>/gi,'\n'),'text/html');
     pending.profileText=String(doc.body.textContent||'').replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ').trim();
    }
   }
-  if(original.gallery126&&!original.profileOnly){pending.articleThumbnailMissing=Boolean(thumbnailMissingEvidence);pending.thumbnailMissingEvidence=thumbnailMissingEvidence}
+  if((original.gallery126||original.creatorIndex)&&!original.profileOnly){pending.articleThumbnailMissing=Boolean(thumbnailMissingEvidence);pending.thumbnailMissingEvidence=thumbnailMissingEvidence}
   if(original.presentation){
    const compose=page.__MUMEI_PROFILE_CARD_CONTENT__?.compose;
    if(typeof compose!=='function')return await blocked();
-   const presentation=compose(pending,note,profile,original.presentation);
+   const presentation=compose(pending,note,original.creatorIndex?{...profile,profileText:pending.profileText}:profile,original.presentation);
    if(!presentation||typeof presentation!=='object'||presentation.size!==original.presentation.size||presentation.content!==original.presentation.content)return await blocked();
    pending.presentation=presentation;
+  }
+  if(original.creatorIndex){
+   pending.creatorIndexProfileMissing=!pending.profileText;
+   pending.creatorIndexProfileSource=retainBio?original.creatorIndexProfileSource:profilePayload?'creator-api':'verified-article-author';
+   const reading=[profile.nicknameKana,profile.nickname_kana,profile.nameKana,profile.name_kana,profile.furigana].find(value=>typeof value==='string'&&value.trim())||(pending.creator===original.creator?original.creatorReading:'')||'';
+   if(reading!==original.creatorReading||pending.creator!==original.creator){
+    pending.creatorReading=reading;
+    await prepareCreatorIndexReadings([pending]);
+    pending.creatorIndexKey={...creatorIndexNameKey(pending),display:pending.creator};
+   }
   }
   pending=qualityCall('refreshed',[pending,{target:id,note,profile}],null);
   if(!pending||qualityCall('hasVerifiedFreshIdentity',[pending],false)!==true||qualityCall('preflight',[pending,{phase:'images'}],null)||qualityCall('enabled',[],false)!==true)return await blocked();
@@ -9018,6 +9332,9 @@ async function qualityRetryHeldRun(run){
      if(presentationOwned!==after)return true;
     }
    }
+   if(original.creatorIndex)return Boolean(saved.pendingCreatorIndex&&(
+    saved.pendingCreatorIndex.url!==original.url||original.creator!==pending.creator||original.title!==pending.title||original.creatorIndexKey?.key!==pending.creatorIndexKey?.key||
+    original.presentation?.text!==pending.presentation?.text||original.articleThumbnailMissing!==pending.articleThumbnailMissing||original.thumbUrl!==pending.thumbUrl||original.actorImageUrl!==pending.actorImageUrl));
    if(typeof activityText!=='function'||!hasProfileText)return false;
    const before=activityText(original),after=activityText(pending),galleryOwned=saved.galleryProfileTexts?.[original.url]||saved.galleryProfileTexts?.[id];
    return before!==after&&((saved.activityTexts||[]).includes(before)||typeof galleryOwned==='string'&&galleryOwned!==after);
@@ -9028,7 +9345,13 @@ async function qualityRetryHeldRun(run){
   if(changesOwnedIntroduction(run))return await blocked();
   const latest=readRun();
   if(!latest||latest.articleKey!==editorArticleKey()||latest.articleKey!==articleKey||latest.createdAt!==runId||JSON.stringify(latest.qualityHold)!==holdJSON||!Array.isArray(latest.rows)||JSON.stringify(latest.rows[at])!==originalJSON||JSON.stringify(latest.items||[])!==originalItemsJSON||itemsContain(latest,original)||changesOwnedIntroduction(latest))return stale();
-  const rows=latest.rows.slice();rows[at]=pending;
+  let rows=latest.rows.slice();rows[at]=pending;
+  if(original.creatorIndex){
+   // Only this still-unpasted creator may move. All completed rows retain
+   // their relative order, design, source URL and native image ID.
+   rows=rows.sort(compareCreatorIndexRows).map((row,index)=>row.index===index+1?row:{...row,index:index+1});
+   validateCreatorIndexRows(rows);
+  }
   const {qualityHold:clearedHold,...retained}=latest;
   try{
    writeRun({...retained,rows,updatedAt:Date.now()});

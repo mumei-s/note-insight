@@ -97,7 +97,7 @@ export async function runtime({baseline=false,count=3,record=true,reverse=false,
  const outerEnd=code.lastIndexOf('})();'),editorEnd=code.lastIndexOf('})();',outerEnd-1);
  code=code.slice(0,editorEnd)+`globalThis.editorApi={patch:code=>eval(code),createFixed300,pauseFix,readRun,writeRun,buildRows,preparePerson,prepareGalleryPerson,makeFile,assignDesigns,activityText,validateFixedRows};\n`+code.slice(editorEnd);
  vm.runInContext(code,c);
- const patch=`findView=()=>view;selectionApi=()=>Selection;nativeImageCommand=()=>upload;xhrJSON=requestJSON;xhr=async url=>'<article>自己紹介と子育て、ワーママの日常です。</article>';bitmapFromUrl=bitmap;setStatus=(text,bad)=>state.statuses.push({text,bad});sleep=wait;`;
+ const patch=`findView=()=>view;selectionApi=()=>Selection;nativeImageCommand=()=>upload;xhrJSON=requestJSON;xhr=async url=>new URL(url).pathname.startsWith('/api/')?JSON.stringify(await requestJSON(url)):'<article>自己紹介と子育て、ワーママの日常です。</article>';bitmapFromUrl=bitmap;setStatus=(text,bad)=>state.statuses.push({text,bad});sleep=wait;`;
  c.coreApi.patch(patch);c.editorApi.patch(patch);
  c.coreApi.patch(`const fixtureOriginalBuildRows=buildRows;buildRows=async function(...args){const rows=await fixtureOriginalBuildRows(...args);if(state.measurement)state.measurement.rowsReadyAt=fixtureNow();return rows};`);
  // Only external note capabilities are simulated; conversion/ownership/save/
