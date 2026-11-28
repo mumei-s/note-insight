@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#23483c">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; img-src data:; style-src 'sha256-jvjn7N91/j4JyM9M6yDj7djrFBeeogHZtLS1P4T+b28='; script-src 'sha256-BhrrylH/nlUks92BYj84SEsogYOz/iDJVQu6+8rUwy0='; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>原稿の点検室｜無名S note</title>
+<style>:root{color-scheme:light;--paper:#f8f6f1;--card:#fffefa;--ink:#222a26;--muted:#515f57;--rule:#c5ccc1;--accent:#28503e;--accent-strong:#153b2a;--wash:#e6eee7;--alert:#8e2d24;--warn:#855b28}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;line-height:1.65;font-size:16px;overflow-wrap:anywhere}
+.wrap{width:min(100% - 36px,780px);margin:0 auto}
+.skip{position:absolute;left:-9999px}.skip:focus{left:10px;top:12px;background:white;z-index:2}
+.mast{background:#203d30;color:white;border-bottom:3px solid #cfaf88}.mast-inner{display:flex;align-items:center;gap:12px;min-height:60px}.brand{font-weight:650;letter-spacing:.045em;font-size:.92rem}.brand span{opacity:.55}
+.symbol{width:23px;height:27px;border:1.5px solid #dcd6b4;position:relative;transform:rotate(-5deg);border-radius:2px}.symbol:after{content:"";position:absolute;width:10px;height:5px;border:solid #f1ead4;border-width:0 0 2px 2px;transform:rotate(-45deg);top:7px;left:5px}
+.intro{padding:clamp(25px,5vw,46px) 0 22px}.intro h1{font:700 clamp(2.2rem,7vw,3.65rem)/1.18 "Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif;letter-spacing:.025em;margin:0}.intro h1 span{color:#a66b40}.intro p{color:var(--muted);margin:8px 0 0;font-size:.96rem}
+.tabs{display:flex;border-bottom:1px solid var(--rule);gap:2px;margin-bottom:18px;flex-wrap:wrap}.tabs button{border:0;border-radius:0;background:transparent;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;padding:10px 15px;white-space:normal;min-height:46px}.tabs button[aria-pressed=true]{border-bottom-color:var(--accent);color:var(--accent);font-weight:700}
+.panel{padding:clamp(17px,4vw,30px);background:var(--card);border:1px solid var(--rule);border-radius:10px;margin:0 0 15px}
+h2,h3,p{margin:0 0 .75em}h2{font-size:1.33rem;line-height:1.45}h3{font-size:1.03rem;margin-top:1.35em}.section-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.section-head h2{margin:0}
+label,legend{display:block;font-size:.98rem;font-weight:660;margin:16px 0 6px;line-height:1.6}.small,small{color:var(--muted);font-size:.85rem;line-height:1.6}small{display:block}.id-wrap,.code-line,.actions,.account{display:flex;gap:9px;align-items:center}.id-wrap{border:1px solid #87978b;border-radius:6px;padding-left:12px;background:white}.id-wrap>span{color:var(--muted)}.id-wrap input{border:0}
+input,textarea,select,button{font:inherit;max-width:100%}input,textarea,select{background:#fff;color:var(--ink);border:1px solid #87978b;border-radius:6px;width:100%;padding:9px 11px;font-size:16px}textarea{display:block;resize:vertical;min-height:3em;line-height:1.7}input[readonly],textarea[readonly]{background:#f5f7f1}input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #b47c35;outline-offset:2px}.id-wrap input:focus-visible{outline-offset:0}
+button{background:var(--card);border:1px solid #899a8c;color:var(--accent-strong);font-weight:610;border-radius:7px;padding:8px 13px;cursor:pointer;line-height:1.5;min-height:44px}
+button:disabled{opacity:.57;cursor:wait}.primary{background:var(--accent);color:white;border-color:var(--accent)}.primary:hover{background:var(--accent-strong)}.subtle{border-color:transparent;background:transparent;text-decoration:underline;text-underline-offset:.2em}.actions{flex-wrap:wrap;margin-top:15px}form>button{margin-top:16px}a{color:var(--accent-strong);text-underline-offset:.22em}
+.code-line input{width:min(100%,300px)}.code-line button{flex-shrink:0}.code-line{margin:.8em 0}.account{justify-content:space-between;flex-wrap:wrap;color:var(--muted);font-size:.88rem}.account .subtle{font-size:.87rem}
+fieldset{border:0;padding:0;margin:0;min-width:0}legend{padding:0}.stages legend{margin:0 0 5px}.radio-group{display:flex;flex-wrap:wrap;gap:6px}.radio-group label{margin:0;position:relative}.radio-group input{position:absolute;opacity:0;width:1px;height:1px}.radio-group span{display:block;padding:6px 12px;border:1px solid var(--rule);border-radius:6px;min-height:42px;line-height:1.7}.radio-group input:checked+span{color:#193824;border:2px solid #416541;background:var(--wash);padding:5px 11px}.radio-group input:focus-visible+span{outline:3px solid #b47c35;outline-offset:2px}
+.feedback{color:var(--accent-strong);white-space:pre-line;font-size:.95rem}.feedback:empty{display:none}.feedback.error{color:var(--alert)}#status:not(:empty){padding:12px;background:#f7efdf;border-radius:6px}
+.finding,details.application{border-top:1px solid var(--rule);padding:13px 0}.finding p{margin:.25em 0}.finding .fragment{font-size:.9rem;color:var(--muted)}summary{cursor:pointer;font-weight:700;min-height:42px;padding-top:6px}.application form{padding:4px 0 12px}.events-list{padding-left:1.25em}.footer{padding:18px 0 30px;font-size:.83rem;color:var(--muted)}.notice{border:1px solid var(--warn);padding:12px}
+@media(max-width:440px){.wrap{width:calc(100% - 24px)}.panel{padding:16px 13px}.tabs button{padding:9px 12px}.radio-group span{padding:7px 11px}.radio-group input:checked+span{padding:6px 10px}.brand{font-size:.86rem}.account{gap:0}}
+@media print{body{background:white}.mast,.intro,.tabs,.footer,.account,.actions,button,#panel-owner{display:none!important}.wrap{width:100%}.panel{border:0;padding:0}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">本文へ</a>
+<header class="mast"><div class="wrap mast-inner"><div class="symbol" aria-hidden="true"></div><div class="brand">無名S note <span>／</span> 制作の検閲キット</div></div></header>
+<main id="main" class="wrap">
+<div class="intro"><h1>原稿の点検室<span>。</span></h1><p>書いた一文と、その根拠を並べて確かめる。</p></div>
+<noscript><p class="notice">点検室を使うには、ブラウザのJavaScriptを有効にしてください。</p></noscript>
+<nav aria-label="利用メニュー" class="tabs" id="tabs" hidden>
+<button type="button" id="tab-review" aria-controls="panel-review" aria-pressed="true">原稿の点検</button>
+<button type="button" id="tab-owner" aria-controls="panel-owner" aria-pressed="false" hidden>販売者用</button>
+</nav>
+<section id="panel-review" aria-label="原稿の点検">
+<div id="initializing" class="panel"><p role="status">詳細点検の受付を確認しています。</p></div>
+<div id="unavailable" class="panel" hidden><h2>詳細点検の受付</h2><p>現在、点検室の受付を確認できません。時間をおいてもう一度お試しください。</p><div class="actions"><button type="button" id="check-server">受付を再確認</button></div></div>
+<div class="panel" id="enter" hidden>
+<h2>noteで本人確認</h2><p>この記事を読んでいるnoteアカウントを使います。</p>
+<form id="entry-form"><label for="note-id">note ID</label><div class="id-wrap"><span aria-hidden="true">@</span><input id="note-id" required maxlength="33" placeholder="あなたのnote ID" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="id-tip"></div><small id="id-tip">プロフィールのURLで、note.com/ の直後にある文字です。</small><button class="primary" type="submit">確認コードを発行</button></form>
+</div>
+<div class="panel" id="verify" hidden>
+<h2>プロフィールに確認コードを載せる</h2><p>次のコードをnoteの自己紹介文の末尾に追記して保存します。元の自己紹介は残してください。</p>
+<div class="code-line"><input id="proof-code" readonly aria-label="本人確認用の一時コード" spellcheck="false"><button type="button" id="copy-code">コピー</button></div><p class="small" id="proof-expiry"></p>
+<p><a id="profile-link" target="_blank" rel="noopener noreferrer">自分のnoteプロフィールを開く ↗</a></p>
+<p>保存したらこの画面に戻ってください。確認が済んだら、コードは自己紹介から消せます。</p>
+<div class="actions"><button type="button" class="primary" id="confirm-proof">プロフィールを確認</button><button type="button" class="subtle" id="restart-proof">最初から入力</button></div>
+</div>
+<div class="panel" id="waiting" hidden><h2 id="waiting-title">利用状況を確認</h2><p id="waiting-text"></p><div class="actions"><button type="button" id="refresh" class="primary">利用状況を更新</button></div></div>
+<div id="editor" hidden>
+<div class="panel"><div class="section-head"><h2>原稿を点検する</h2><span class="small" id="kind"></span></div>
+<form id="review-form">
+<fieldset class="stages"><legend>いまの工程</legend><div class="radio-group">
+<label><input type="radio" name="stage" value="着手前"><span>着手前</span></label><label><input type="radio" name="stage" value="作業中"><span>作業中</span></label><label><input type="radio" name="stage" value="公開前" checked><span>公開前</span></label>
+</div></fieldset>
+<label for="draft">下書き</label><textarea id="draft" required rows="7" maxlength="24000" placeholder="一段落だけでも点検できます。"></textarea>
+<label for="evidence">根拠・指示 <span class="small">任意</span></label><textarea id="evidence" rows="3" maxlength="8000" placeholder="原文、実際の件数、決めた見出しなど。"></textarea>
+<p class="small">点検ボタンを押すと入力内容をサーバーへ送ります。原稿と根拠を履歴に保存する機能はありません。</p>
+<div class="actions"><button type="submit" class="primary">この原稿を点検</button><button type="button" id="clear-draft" class="subtle">入力を消す</button></div>
+</form></div>
+<section id="result" class="panel" hidden><div class="section-head"><h2 id="result-heading" tabindex="-1">点検結果</h2><button type="button" id="copy-result">結果をコピー</button></div><div id="findings"></div><p class="small" id="receipt"></p></section>
+</div>
+<div id="account" class="account" hidden><span id="identity"></span><button type="button" id="forget" class="subtle">この端末の認証情報を消す</button></div>
+<p id="status" class="feedback" role="status" aria-live="polite"></p>
+</section>
+<section id="panel-owner" aria-labelledby="tab-owner" hidden><div class="panel"><div class="section-head"><h2>販売者の管理画面</h2><button type="button" id="refresh-owner">一覧を更新</button></div><p>申請者のnote IDを、この記事の購入または対象メンバーの記録と照合してください。</p>
+<h3>利用申請</h3><div id="requests"></div><button id="more-owner" hidden type="button">続きを表示</button>
+<h3>検知した操作</h3><p class="small">同時実行や繰り返しの記録です。通信の再送や端末変更でも記録される場合があります。</p><div id="events"></div><p class="feedback" id="owner-status" role="status" aria-live="polite"></p>
+</div></section>
+</main>
+<footer class="wrap footer">無名S note</footer>
+<script>'use strict';
+const KitSession = (() => {
+  const endpoint = '/api/kit';
+  let dbPromise, memory;
+  const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  async function db() {
+    if (!dbPromise) dbPromise = new Promise(resolve => {
+      try {
+        const req = indexedDB.open('note-review-reader-v1', 1);
+        req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('device')) req.result.createObjectStore('device'); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = req.onblocked = () => resolve(null);
+      } catch { resolve(null); }
+    });
+    return dbPromise;
+  }
+  async function data(operation, value) {
+    try {
+      const storage = await db();
+      if (!storage) return {ok:false};
+      return await new Promise(resolve => {
+        const transaction = storage.transaction('device', operation === 'get' ? 'readonly' : 'readwrite');
+        const store = transaction.objectStore('device');
+        const request = operation === 'get' ? store.get('current') :
+          operation === 'put' ? store.put(value,'current') : store.delete('current');
+        transaction.oncomplete = () => resolve({ok:true,value:request.result});
+        transaction.onerror = transaction.onabort = () => resolve({ok:false});
+      });
+    } catch { return {ok:false}; }
+  }
+  async function load() {
+    const record = await data('get');
+    return record.ok ? record.value || null : memory || null;
+  }
+  async function save(value) {
+    memory = value;
+    return (await data('put',value)).ok;
+  }
+  async function forget() {
+    memory = null;
+    return (await data('delete')).ok;
+  }
+  class ApiError extends Error {
+    constructor(message, status, code) { super(message); this.status = status; this.code = code; }
+  }
+  async function request(options, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try { return await fetch(endpoint,{...options,signal:controller.signal}); }
+    finally { clearTimeout(timer); }
+  }
+  function newNonce() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes,n => n.toString(16).padStart(2,'0')).join('');
+    return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+  }
+  async function ready() {
+    try {
+      const result = await request({method:'GET',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer'},6500);
+      if (!result.ok) return false;
+      return (await result.json()).ready === true;
+    } catch { return false; }
+  }
+  async function post(body) {
+    let response;
+    try {
+      response = await request({method:'POST',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},25000);
+    } catch { throw new ApiError('点検サーバーに接続できませんでした。接続状況を確認してからお試しください。',0,'NETWORK'); }
+    let result;
+    try { result = await response.json(); } catch { throw new ApiError('点検サーバーから応答を読み取れませんでした。',response.status,'INVALID_REPLY'); }
+    if (!response.ok) throw new ApiError(typeof result.error === 'string' ? result.error : '点検サーバーで操作を完了できませんでした。',response.status,result.code);
+    return result;
+  }
+  async function keypair() {
+    if (!window.crypto?.subtle) throw new Error('この画面では端末の認証鍵を作れません。有料記事のリンクを、対応するブラウザで開いてください。');
+    return crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);
+  }
+  async function start(noteId,previous) {
+    const pair = previous && previous.noteId === noteId && previous.pair ? previous.pair : await keypair();
+    const raw = await crypto.subtle.exportKey('jwk',pair.publicKey);
+    const jwk = {kty:'EC',crv:'P-256',x:raw.x,y:raw.y};
+    const data = await post({action:'start',noteId,jwk});
+    if (!data.device || !data.challengeId || !data.code || !data.expiresAt) throw new Error('確認コードを読み取れませんでした。再度お試しください。');
+    return {noteId,device:data.device,pair,challenge:{id:data.challengeId,code:data.code,expiresAt:data.expiresAt}};
+  }
+  async function signed(record,action,payload = {}) {
+    const nonce = newNonce();
+    const timestamp = Math.floor(Date.now()/1000);
+    const device = record.device;
+    const bytes = new TextEncoder().encode(JSON.stringify(['note-kit-v1',action,device,nonce,timestamp,payload]));
+    const raw = await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},record.pair.privateKey,bytes);
+    return post({action,device,nonce,timestamp,payload,signature:b64url(raw)});
+  }
+  return {load, save, forget, ready, start, signed};
+})();
+
+'use strict';
+(() => {
+  const $ = id => document.getElementById(id);
+  const panels = ['review','owner'];
+  const entryScreens = ['initializing','unavailable','enter','verify','waiting','editor'];
+  let device = null, viewer = null, activeTab = 'review', currentScreen = 'initializing';
+  let generation = 0, report = '', cursor = null;
+  let persistent = true, running = false, reviewRevision = 0;
+
+  const fmtDate = iso => { const date = new Date(iso); return isNaN(date) ? '' : date.toLocaleString('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  function node(tag, text, className) {
+    const el = document.createElement(tag);
+    if (text !== undefined && text !== null) el.textContent = text;
+    if (className) el.className = className;
+    return el;
+  }
+  function tell(id,message='',isError=false) {
+    $(id).textContent = message;
+    $(id).classList.toggle('error',isError);
+  }
+  function screen(name) {
+    currentScreen = name;
+    for (const item of entryScreens) $(item).hidden = item !== name;
+    $('account').hidden = !device || !['waiting','editor'].includes(name);
+    $('identity').textContent = device ? '@' + device.noteId : '';
+  }
+  function tab(name) {
+    if (name === 'owner' && !viewer?.owner) return;
+    activeTab = name;
+    for (const value of panels) {
+      $('tab-' + value).setAttribute('aria-pressed', String(value === name));
+      $('panel-' + value).hidden = value !== name;
+    }
+    if (name === 'owner') refreshOwner(false);
+  }
+  for (const name of panels) $('tab-' + name).addEventListener('click',() => tab(name));
+  $('check-server').addEventListener('click',openOnline);
+  function codeView() {
+    screen('verify');
+    $('proof-code').value = device.challenge.code;
+    $('proof-expiry').textContent = '有効期限　' + fmtDate(device.challenge.expiresAt);
+    $('profile-link').href = 'https://note.com/' + encodeURIComponent(device.noteId);
+  }
+  function renderViewer(value) {
+    viewer = value;
+    $('tab-owner').hidden = !value.owner; $('tabs').hidden = !value.owner;
+    if (!value.owner && activeTab === 'owner') tab('review');
+    if (value.state === 'active') {
+      screen('editor');
+      $('kind').textContent = value.owner ? '販売者' : value.kind === 'member' || value.kind === 'membership' ? 'メンバー利用　' + fmtDate(value.expiresAt) + 'まで' : '単品購入';
+    } else {
+      screen('waiting');
+      const labels = {
+        pending:['利用記録を照合中','本人確認が済みました。購入・メンバーの利用記録を確認できると、原稿を点検できます。自己紹介の確認コードは消せます。'],
+        expired:['利用期限が過ぎました','メンバー利用の期限が過ぎています。継続中の場合は、対象プランの利用期間をご確認ください。'],
+        revoked:['利用が停止されています','このnoteアカウントの利用状況をご確認ください。'],
+      };
+      const [title,text] = labels[value.state] || ['利用状況を確認してください','利用状況を更新してお確かめください。'];
+      $('waiting-title').textContent = title;
+      $('waiting-text').textContent = text;
+    }
+  }
+  function timedOut(code) {
+    const time = new Date(code?.expiresAt).getTime();
+    return !Number.isFinite(time) || time <= Date.now();
+  }
+  function tryAgain(message) {
+    viewer = null; $('tab-owner').hidden = true; $('tabs').hidden = true;tab('review');
+    $('note-id').value = device?.noteId || '';
+    screen('enter');tell('status',message,true);
+  }
+  async function refreshAccess() {
+    if (!device) return;
+    const ticket = generation;
+    try {
+      const result = await KitSession.signed(device,'status');
+      if (ticket !== generation) return;
+      renderViewer(result);
+    } catch(error) {
+      if (ticket !== generation) return;
+      if ([401,403,404].includes(error.status)) { tryAgain('この端末で本人確認を行ってください。'); return; }
+      if (currentScreen === 'initializing') {
+        screen('waiting'); $('waiting-title').textContent = '接続を確認してください';
+        $('waiting-text').textContent = '原稿の点検にはインターネット接続が必要です。時間をおいて、もう一度お試しください。';
+      }
+      throw error;
+    }
+  }
+  async function task(button,feedback,operation) {
+    if (button.disabled) return;
+    const ticket = generation;
+    button.disabled = true;
+    tell(feedback,'');
+    try { await operation(); }
+    catch(error) { if (ticket === generation) tell(feedback,error.message || '操作を完了できませんでした。',true); }
+    finally { button.disabled = false; }
+  }
+  async function copy(text,feedback) {
+    if (!text) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error();
+      await navigator.clipboard.writeText(text);
+      tell(feedback,'コピーしました。');
+    } catch {
+      const input = node('textarea'); input.value = text; input.setAttribute('aria-label','コピーする内容');
+      $(feedback).before(input); input.focus(); input.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch {}
+      if (ok) { input.remove();tell(feedback,'コピーしました。'); }
+      else {
+        tell(feedback,'選択中の文章を、ブラウザのコピー操作でコピーしてください。');
+        input.addEventListener('blur',() => input.remove(),{once:true});
+      }
+    }
+  }
+  $('entry-form').addEventListener('submit',event => {
+    event.preventDefault();
+    const noteId = $('note-id').value.trim().replace(/^@/,'').toLowerCase();
+    if (!/^[a-z0-9_]{1,32}$/.test(noteId)) { tell('status','note IDを半角の英小文字・数字・アンダースコアで入力してください。',true); return; }
+    task(event.currentTarget.querySelector('button[type=submit]'),'status', async () => {
+      const record = await KitSession.start(noteId,device);
+      device = record; viewer = null; generation++;
+      persistent = await KitSession.save(device);
+      codeView();
+      if (!persistent) tell('status','このブラウザでは端末の認証情報を保存できません。この画面を開いたまま本人確認してください。');
+    });
+  });
+  $('copy-code').addEventListener('click',() => copy($('proof-code').value,'status'));
+  $('restart-proof').addEventListener('click',() => {
+    if (device) $('note-id').value = device.noteId;
+    screen('enter');tell('status','');
+  });
+  $('confirm-proof').addEventListener('click',event => {
+    task(event.currentTarget,'status',async () => {
+      if (!device?.challenge || timedOut(device.challenge)) { tryAgain('確認コードの期限が過ぎました。新しいコードを発行してください。');return; }
+      const result = await KitSession.signed(device,'confirm',{challengeId:device.challenge.id});
+      device = {...device,challenge:null};persistent = await KitSession.save(device);
+      renderViewer(result);
+      tell('status','本人確認が済みました。プロフィールから確認コードを消せます。' + (persistent ? '' : ' この画面を閉じると再認証が必要です。'));
+    });
+  });
+  $('refresh').addEventListener('click',event => task(event.currentTarget,'status',refreshAccess));
+  async function forget() {
+    if (!window.confirm('このブラウザに記録した認証情報を消しますか？ 次回の利用には本人確認が必要です。')) return;
+    const previous = device;
+    const button = $('forget');
+    button.disabled = true;
+    let remoteCleared = false;
+    try {
+      if (previous && !previous.challenge) {
+        await KitSession.signed(previous,'logout');
+        remoteCleared = true;
+      }
+    } catch { /* The local key can still be removed offline. */ }
+    generation++;device = null;viewer = null;cursor = null;
+    const cleared = await KitSession.forget();
+    button.disabled = false;
+    $('entry-form').reset();$('review-form').reset();clearResult();$('requests').replaceChildren();$('events').replaceChildren();
+    $('tab-owner').hidden = true;$('tabs').hidden = true;tab('review');screen('enter');
+    const message = cleared || !persistent ? 'この端末の認証情報を消去しました。' : 'この画面の認証を終了しました。端末の保存領域を確認できませんでした。';
+    tell('status',message + (remoteCleared ? ' サーバーでも端末登録を解除しました。' : ' サーバー側の端末解除は未確認です。'));
+  }
+  $('forget').addEventListener('click',forget);
+  function clearResult() { report = ''; $('findings').replaceChildren(); $('receipt').textContent = ''; $('result').hidden = true; }
+  function renderResult(data) {
+    clearResult();const root = $('findings');
+    const notes = [];
+    const group = (heading,rows,empty,format) => {
+      root.append(node('h3',heading));notes.push(heading);
+      if (!Array.isArray(rows) || !rows.length) { root.append(node('p',empty,'small'));notes.push(empty); }
+      else for (const row of rows) {
+        const div = node('div',null,'finding');
+        const lines = format(row).filter(value => typeof value === 'string' && value.trim());
+        for (const line of lines) div.append(node('p',line));
+        root.append(div);notes.push(lines.join('\n'));
+      }
+      notes.push('');
+    };
+    group('直す候補',data.fixes,'今回の入力から、修正候補は挙がりませんでした。',x => [x.excerpt ? '対象　' + x.excerpt : '', x.suggestion, x.reason]);
+    group('人が確かめること',data.manual,'この欄の指示はありません。',x => [x.label,x.action]);
+    group('本文で照合したこと',data.checked,'照合した項目はありません。',x => [x]);
+    if (data.receipt) { const line = '点検番号　' + data.receipt; $('receipt').textContent = line; notes.push(line); }
+    report = notes.join('\n').trim();
+    $('result').hidden = false; $('result-heading').focus();
+  }
+  $('review-form').addEventListener('submit',event => {
+    event.preventDefault();
+    if (running || !device || !viewer) return;
+    const draft = $('draft').value, evidence = $('evidence').value, stage = event.currentTarget.querySelector('input[name=stage]:checked').value;
+    if (!draft.trim()) { tell('status','下書きを入力してください。',true);return; }
+    const ticket = generation, revision = ++reviewRevision; running = true;
+    clearResult();
+    task(event.currentTarget.querySelector('button[type=submit]'),'status',async () => {
+      try {
+        const result = await KitSession.signed(device,'review',{draft,evidence,stage});
+        if (ticket === generation && revision === reviewRevision) renderResult(result);
+      } catch(error) {
+        if (ticket === generation && (error.status === 401 || error.status === 403)) await refreshAccess();
+        throw error;
+      } finally { running = false; }
+    });
+  });
+  $('copy-result').addEventListener('click',() => copy(report,'status'));
+  $('clear-draft').addEventListener('click',() => {
+    if (($('draft').value || $('evidence').value) && !window.confirm('この画面の原稿・根拠と点検結果を消しますか？')) return;
+    reviewRevision++;
+    $('review-form').reset();clearResult();tell('status','入力を消去しました。');
+  });
+  const kinds = {purchase:'単品購入',member:'期限付きメンバー',membership:'期限付きメンバー',owner:'販売者'};
+  const states = {pending:'照合待ち',revoked:'停止中',expired:'期限終了',active:'利用中'};
+  function renderApplication(row) {
+    const details = node('details',null,'application'),summary = node('summary','@'+row.noteId+'　'+(states[row.state]||'状態未確認'));
+    details.append(summary);
+    const info = [kinds[row.kind],row.expiresAt ? fmtDate(row.expiresAt)+'まで' : ''].filter(Boolean).join('　');
+    if (info) details.append(node('p',info,'small'));
+    if (row.mark) details.append(node('p','点検番号の識別部分　' + row.mark,'small'));
+    const form = node('form'), label = node('label','利用権'), select = node('select');
+    for (const [value,title] of [['','選択してください'],['purchase','単品購入'],['member','メンバー利用（期限付き）'],['revoke','利用を停止']]) {
+      if(row.kind === 'purchase' && value === 'member') continue;
+      const option = node('option',title);option.value = value;select.append(option);
+    }
+    select.required = true;label.append(select);form.append(label);
+    const end = node('label','利用終了日時（この端末の現地時間）'), date = node('input');date.type = 'datetime-local';end.hidden = true;end.append(date);form.append(end);
+    select.addEventListener('change',()=>{end.hidden = select.value !== 'member';date.required = !end.hidden;});
+    const button = node('button','利用権を適用する');button.type = 'submit';form.append(button);
+    form.addEventListener('submit',e=>{
+      e.preventDefault();
+      const grant = select.value;
+      const payload = {subject:row.subject,noteId:row.noteId,grant};
+      if(grant === 'member') {
+        const when = new Date(date.value);
+        if (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now()) { tell('owner-status','現在より後の利用終了日時を選んでください。',true);return; }
+        payload.expiresAt = when.toISOString();
+      }
+      if (!grant || !window.confirm('@'+row.noteId+' の利用権を「'+select.selectedOptions[0].textContent+'」に変更しますか？')) return;
+      task(button,'owner-status',async()=>{await KitSession.signed(device,'owner-grant',payload);await refreshOwner(false);tell('owner-status','利用権を更新しました。');});
+    });
+    details.append(form);return details;
+  }
+  async function refreshOwner(more) {
+    if (!viewer?.owner || !device) return;
+    try {
+      const data = await KitSession.signed(device,'owner-list',more && cursor ? {cursor} : {});
+      if (!viewer?.owner) return;
+      const list = $('requests');if (!more) list.replaceChildren();
+      const rows = Array.isArray(data.entries) ? data.entries : [];
+      if (!rows.length && !more) list.append(node('p','申請はありません。','small'));
+      rows.forEach(row=>list.append(renderApplication(row)));
+      cursor = data.nextCursor || null;$('more-owner').hidden = !cursor;
+      if (more) return;
+      const dataEvents = await KitSession.signed(device,'owner-events');
+      if (!viewer?.owner) return;
+      const events = $('events');events.replaceChildren();
+      const items = Array.isArray(dataEvents.events) ? dataEvents.events : [];
+      if (!items.length) events.append(node('p','検知記録はありません。','small'));
+      else {
+        const ul = node('ul',null,'events-list');
+        const labels = {parallel_device:'異なる登録端末の同時点検',replay:'同じ署名付き操作の再受信',volume:'点検回数の上限',rapid_enrollment:'端末登録の集中',device_replacement:'登録端末の入れ替え'};
+        items.forEach(item=>{
+          const type = item.type || item.kind;
+          const detail = [fmtDate(item.at || item.occurredAt), item.noteId ? '@'+item.noteId : '', labels[type] || type, Number.isSafeInteger(item.hits) ? item.hits+'件' : ''];
+          ul.append(node('li',detail.filter(Boolean).join('　')));
+        });
+        events.append(ul);
+      }
+    } catch (error) { tell('owner-status',error.message,true); }
+  }
+  $('refresh-owner').addEventListener('click',event=>task(event.currentTarget,'owner-status',()=>refreshOwner(false)));
+  $('more-owner').addEventListener('click',event=>task(event.currentTarget,'owner-status',()=>refreshOwner(true)));
+  async function openOnline() {
+    screen('initializing');tell('status','');
+    try {
+      if (!await KitSession.ready()) { screen('unavailable');return; }
+      device = await KitSession.load();
+      if (!device?.pair?.privateKey || !device.device) { device=null;screen('enter');return; }
+      if (device.challenge && !timedOut(device.challenge)) {codeView();return;}
+      if (device.challenge) {tryAgain('前回の確認コードは期限が過ぎています。もう一度発行してください。');return;}
+      await refreshAccess();
+    } catch(error) {
+      if (currentScreen === 'initializing') screen('enter');
+      tell('status',error.message,true);
+    }
+  }
+  openOnline();
+})();
+</script>
+</body></html>

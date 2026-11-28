@@ -1,15 +1,4 @@
-.worker/
-.wrangler/
-node_modules/
-dist/
-coverage/
-*.map
-*.log
+.private/
 *.tmp
-.dev.vars*
+*.key
 .env*
-build-key*
-wrangler.local.*
-engine.mjs
-*.test.mjs
-protected-*.mjs

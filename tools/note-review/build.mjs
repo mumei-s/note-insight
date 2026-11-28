@@ -1,95 +1,63 @@
+import {gzipSync, gunzipSync} from 'node:zlib';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const envelopePath = join(root, 'review-core.enc.json');
-const output = join(root, '.worker');
-const aad = Buffer.from('note-review/core/v1');
-const [command, sourceArg] = process.argv.slice(2);
+const archive = join(root, 'review-kit.enc.json');
+const context = Buffer.from('mumeis-note-review-kit/archive/v2');
+const [mode = 'unpack', input] = process.argv.slice(2);
+const manifestName = 'sources.json';
 
-async function readKey() {
-  const file = process.env.REVIEW_BUILD_KEY_FILE;
-  if (!file) throw new Error('Set REVIEW_BUILD_KEY_FILE to your private key file.');
-  const text = (await readFile(file, 'utf8')).trim();
-  const key = Buffer.from(text, 'base64');
-  if (key.length !== 32 || key.toString('base64') !== text) throw new Error('Expected a base64 32-byte build key.');
+function safeName(name) {
+  return typeof name === 'string' && /^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.ー一-龯ぁ-ゖァ-ヺ]+$/.test(name)
+    && name.split('/').every(part => !part.startsWith('.'));
+}
+async function privateKey() {
+  if (!process.env.REVIEW_BUILD_KEY_FILE) throw new Error('Set REVIEW_BUILD_KEY_FILE.');
+  const raw = (await readFile(process.env.REVIEW_BUILD_KEY_FILE, 'utf8')).trim();
+  const key = Buffer.from(raw,'base64');
+  if (key.length !== 32 || key.toString('base64') !== raw) throw new Error('Invalid build key.');
   return key;
 }
-
-function openEnvelope(input, key) {
-  const envelope = JSON.parse(input);
-  if (envelope.v !== 1 || envelope.alg !== 'A256GCM') throw new Error('Unsupported envelope format.');
-  const iv = Buffer.from(envelope.iv, 'base64');
-  const tag = Buffer.from(envelope.tag, 'base64');
-  if (iv.length !== 12 || tag.length !== 16) throw new Error('Invalid envelope.');
-  const decrypt = createDecipheriv('aes-256-gcm', key, iv);
-  decrypt.setAAD(aad);
-  decrypt.setAuthTag(tag);
-  return Buffer.concat([decrypt.update(Buffer.from(envelope.data, 'base64')), decrypt.final()]);
+function decode(envelope, key) {
+  if (envelope.version !== 2 || envelope.algorithm !== 'AES-256-GCM') throw new Error('Unknown package.');
+  const decrypt = createDecipheriv('aes-256-gcm',key,Buffer.from(envelope.iv,'base64'));
+  decrypt.setAAD(context);
+  decrypt.setAuthTag(Buffer.from(envelope.tag,'base64'));
+  const clear = Buffer.concat([decrypt.update(Buffer.from(envelope.data,'base64')),decrypt.final()]);
+  return JSON.parse(gunzipSync(clear,{maxOutputLength: 12 * 1024 * 1024}).toString('utf8'));
 }
-
-function allowedPrivateName(name) {
-  return name === 'engine.mjs' || name === 'protected-example.mjs' || /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\.test\.mjs$/.test(name);
-}
-
-async function seal(source, key) {
-  const names = (await readdir(source)).filter(allowedPrivateName).sort();
-  if (!names.includes('engine.mjs') || !names.includes('engine.test.mjs')) throw new Error('Private core and tests are required.');
+const key = await privateKey();
+if (mode === 'pack' && input) {
+  const dir = resolve(input);
+  const names = JSON.parse(await readFile(join(dir, manifestName),'utf8'));
+  if (!Array.isArray(names) || !names.length || !names.every(safeName)) throw new Error('Invalid manifest.');
   const files = {};
-  for (const name of names) files[name] = await readFile(join(source, name), 'utf8');
-  if (!files['protected-example.mjs']) {
-    const { example } = await import(pathToFileURL(join(source, 'ui.mjs')).href);
-    if (!example || typeof example.draft !== 'string' || typeof example.evidence !== 'string') throw new Error('Private example is missing.');
-    files['protected-example.mjs'] = 'export const example = ' + JSON.stringify(example, null, 2) + ';\n';
-  }
-  const plain = Buffer.from(JSON.stringify(files));
-  try {
-    if (openEnvelope(await readFile(envelopePath, 'utf8'), key).equals(plain)) return;
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-  }
+  for (const name of [...new Set(names)].sort()) files[name] = (await readFile(join(dir,name))).toString('base64');
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  cipher.setAAD(aad);
-  const data = Buffer.concat([cipher.update(plain), cipher.final()]);
-  const envelope = { v: 1, alg: 'A256GCM', iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: data.toString('base64') };
-  const temp = envelopePath + '.tmp';
-  await writeFile(temp, JSON.stringify(envelope) + '\n', { flag: 'wx' });
-  await rename(temp, envelopePath);
-}
-
-async function build(key) {
-  const files = JSON.parse(openEnvelope(await readFile(envelopePath, 'utf8'), key));
-  if (!['engine.mjs', 'engine.test.mjs', 'protected-example.mjs'].every(name => Object.hasOwn(files, name))) throw new Error('Required modules are missing.');
-  if (Object.entries(files).some(([name, value]) => !allowedPrivateName(name) || typeof value !== 'string')) throw new Error('Invalid entries in envelope.');
-  await rm(output, { force: true, recursive: true });
-  await mkdir(output, { mode: 0o700 });
-  try {
-    for (const [name, code] of Object.entries(files)) {
-      await writeFile(join(output, name), code, { flag: 'wx', mode: 0o600 });
-    }
-    const publicFiles = ['auth.mjs', 'ui.mjs', 'worker.mjs', 'schema.sql', 'protect-build.mjs'];
-    for (const name of publicFiles) await copyFile(join(root, name), join(output, name));
-    const settings = process.env.REVIEW_RULE_KEY_FILE;
-    const ruleKey = settings ? (await readFile(settings, 'utf8')).trim() : process.env.RULE_KEY;
-    if (!ruleKey) throw new Error('Set REVIEW_RULE_KEY_FILE or RULE_KEY for the Worker.');
-    const { bundleEngine } = await import('./protect-build.mjs');
-    const protectedCode = await bundleEngine(files['engine.mjs'], ruleKey);
-    await writeFile(join(output, 'protected-core.mjs'), protectedCode + '\nexport { getEngine };\n', { flag: 'wx', mode: 0o600 });
-  } catch (e) {
-    await rm(output, { recursive: true, force: true });
-    throw e;
+  const cipher = createCipheriv('aes-256-gcm',key,iv);
+  cipher.setAAD(context);
+  const data = Buffer.concat([cipher.update(gzipSync(Buffer.from(JSON.stringify(files)))),cipher.final()]);
+  const envelope = {version:2, algorithm:'AES-256-GCM',iv:iv.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:data.toString('base64')};
+  const tmp = archive + '.tmp';
+  await writeFile(tmp, JSON.stringify(envelope)+'\n', {mode:0o600});
+  await rename(tmp, archive);
+} else if (mode === 'unpack') {
+  const dir = resolve(input || join(root, '.private'));
+  const files = decode(JSON.parse(await readFile(archive,'utf8')),key);
+  const names = Object.keys(files);
+  if (!names.length || !names.every(safeName)) throw new Error('Invalid package.');
+  try { await stat(dir); throw new Error('Choose a new, empty destination path.'); }
+  catch (err) { if (err.code !== 'ENOENT') throw err; }
+  await mkdir(dir,{recursive:true,mode:0o700});
+  for (const name of names) {
+    const dest = join(dir,name);
+    await mkdir(dirname(dest),{recursive:true,mode:0o700});
+    await writeFile(dest,Buffer.from(files[name],'base64'),{flag:'wx',mode:0o600});
   }
-}
-
-try {
-  const key = await readKey();
-  if (command === 'seal' && sourceArg) await seal(resolve(sourceArg), key);
-  else if (command === 'build' && !sourceArg) await build(key);
-  else throw new Error('Use build or seal <private-source-directory>.');
-} catch (e) {
-  console.error(e.message);
-  process.exitCode = 1;
+  await writeFile(join(dir,manifestName),JSON.stringify(names,null,2)+'\n',{mode:0o600});
+} else {
+  throw new Error('Usage: node build.mjs unpack [new-dir] | pack <source-dir>');
 }

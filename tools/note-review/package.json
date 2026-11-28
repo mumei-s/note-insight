@@ -1,10 +1,1 @@
-{
-  "name": "note-review-worker",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=24" },
-  "scripts": {
-    "build": "node build.mjs build",
-    "test": "node --test .worker/*.test.mjs"
-  }
-}
+{"name":"mumeis-note-review-kit","private":true,"type":"module","scripts":{"start":"node web.mjs","restore":"node build.mjs unpack"}}
