@@ -164,3 +164,17 @@ test('通常ページから公式画面へ移動しても自動読み込みせ�
  w.history.pushState(null,'','/dashboard');await until(()=>w.document.getElementById('mumei-dash-run'));await pause(100);assert.equal(h.calls.length,0);
  w.history.pushState(null,'','/tester/n/nfixture');await until(()=>!w.document.getElementById('mumei-dashboard-sync'));
 });
+
+test('入口の自動要求は実際のコアで既存連携の検証・保存確認まで通る',async t=>{
+ const h=harness(t,{readOnStart:false});
+ const id='00000000-0000-4000-8000-000000000001';
+ h.values.set('mumei-dashboard-entry-v179:handoff:'+id,JSON.stringify({requestId:id,noteId:'tester',at:Date.now(),returnTo:'https://mumei-s.github.io/note-insight/#dashboard',period:'month'}));
+ const w=h.note('<main><h1>アクセス状況</h1><select aria-label="期間"><option>過去7日間</option><option selected>過去28日間</option><option>全期間</option></select><p>ページビュー 3</p><script type="application/json">{"page_views":{"2026-09-27":3}}</script></main>','https://note.com/sitesettings/stats?mumei_dashboard_entry='+id);
+ let result='';
+ w.document.addEventListener('mumei-dashboard-entry-finished',e=>{result=e.detail.result; e.stopImmediatePropagation()},true);
+ await until(()=>result,'入口コアから確定結果');
+ assert.equal(result,'ok',w.document.querySelector('#mumei-dashboard-sync .status')?.textContent||JSON.stringify(h.calls));
+ assert.equal(h.calls.filter(x=>x.action==='ingest').length,1);
+ assert.ok(h.calls.some(x=>x.action==='sync-status'&&x.snapshotId),'保存確認まで待つ');
+ assert.ok(!h.calls.some(x=>x.action==='pair-exchange'),'連携し直さない');
+});

@@ -420,6 +420,32 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||currentStoredInsightAccount()?.noteId||"").toLowerCase();
   const updateReturn=captureInsightReturn({mode,tab:navTab,account:noteId});
+  const verifiedDashboardAccount=String(official?.member?.noteId||"").toLowerCase();
+  useEffect(()=>{
+    const url=new URL(window.location.href),outcome=url.searchParams.get("dashboardSync");
+    if(!outcome)return;
+    const messages:Record<string,string>={ok:"公式ダッシュボードを同期しました",unchanged:"公式ダッシュボードを確認しました｜変更なし",partial:"取得済み分を保存しました｜一部は未取得",failed:"自動同期できませんでした｜前回保存分を表示します",skipped:"公式ダッシュボード未更新｜前回保存分を表示します"};
+    if(messages[outcome])showAppFeedback(messages[outcome],6500);
+    for(const key of ["dashboardSync","dashboardVersion","dashboardAt"])url.searchParams.delete(key);
+    window.history.replaceState(window.history.state,"",url.href);
+  },[]);
+  useEffect(()=>{
+    if(!/^[a-z0-9_-]{1,33}$/.test(verifiedDashboardAccount)||verifiedDashboardAccount!==noteId)return;
+    if(mode!=="normal"&&mode!=="analysis")return;
+    const entry=()=>{
+      if(document.visibilityState==="hidden"||!navigator.onLine)return;
+      const from=window.location.href,url=new URL(from);
+      const panel=url.searchParams.get("analysisPanel");
+      if(panel==="notifications"||panel==="verdict")return;
+      let period=url.searchParams.get("insightPeriod")||localStorage.getItem("mumei-analysis-period:"+verifiedDashboardAccount)||"month";
+      if(period!=="week"&&period!=="all")period="month";
+      const returnTo=new URL(captureInsightReturn({mode,tab:navTab,account:verifiedDashboardAccount}));
+      returnTo.searchParams.set("insightPeriod",period);
+      document.dispatchEvent(new CustomEvent("mumei-dashboard-entry-refresh",{detail:{noteId:verifiedDashboardAccount,period,returnTo:returnTo.href,from}}));
+    };
+    entry();window.addEventListener("pageshow",entry);window.addEventListener("online",entry);document.addEventListener("visibilitychange",entry);
+    return()=>{window.removeEventListener("pageshow",entry);window.removeEventListener("online",entry);document.removeEventListener("visibilitychange",entry)};
+  },[verifiedDashboardAccount,noteId,mode,navTab]);
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(updateReturn)}`;
   const notificationConnectionHref=`./notification-connection.html?from=insight${noteId?`&notificationAccount=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(updateReturn)}`;
   function withCurrentReturn(href:string){const target=new URL(href,window.location.href);target.searchParams.set("return",captureInsightReturn({...navigation.current,account:String(currentStoredInsightAccount()?.noteId||noteId).toLowerCase()}));return target.href}
