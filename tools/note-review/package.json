@@ -1,0 +1,1 @@
+{"name":"mumeis-note-review-kit","private":true,"type":"module","scripts":{"start":"node web.mjs","restore":"node build.mjs unpack"}}
