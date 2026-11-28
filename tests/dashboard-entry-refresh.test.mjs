@@ -63,3 +63,13 @@ test('verified manual save skips an unnecessary automatic visit',async t=>{
   note.w.document.dispatchEvent(new note.w.CustomEvent('mumei-dashboard-snapshot-confirmed',{detail:{noteId:'tester',period:'month'}}));
   const home=setup(t,app,gm);home.dispatch();await tick();assert.equal(home.nav.length,0);
 });
+test('finishing a sync will not redirect an unrelated note page',async t=>{
+  const gm=new Map(),home=setup(t,app,gm);home.dispatch();await tick();
+  const note=setup(t,home.nav[0].href,gm);
+  note.w.document.addEventListener('mumei-dashboard-read',()=>{
+    note.w.history.replaceState(null,'','/ss_yr');
+    note.w.document.dispatchEvent(new note.w.CustomEvent('mumei-dashboard-entry-finished',{detail:{result:'ok'}}));
+  },true);
+  await tick();
+  assert.equal(note.reads.length,1);assert.equal(note.nav.length,0);
+});

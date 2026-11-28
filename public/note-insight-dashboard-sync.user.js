@@ -137,6 +137,8 @@
     if(req?.requestId!==id||!safeReturn(req.returnTo)||!Number.isFinite(req.at)||Date.now()-req.at<0||Date.now()-req.at>ENTRY_MAX_AGE||!['week','month','all'].includes(req.period))return false;
     if(!/^[a-z0-9_-]{1,33}$/.test(String(req.noteId||'')))return false;
     const back=result=>{
+      // Respect a newer user navigation during an in-flight refresh.
+      if(!looksDashboard())return;
       const url=new URL(req.returnTo);url.searchParams.set('dashboardSync',['ok','partial','unchanged','skipped'].includes(result)?result:'failed');
       url.searchParams.set('dashboardVersion',VERSION);
       location.replace(url.href);
