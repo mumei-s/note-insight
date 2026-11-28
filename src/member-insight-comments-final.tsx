@@ -6,6 +6,7 @@ import { readInsightSnapshot, writeInsightSnapshot } from "./insight-persistent-
 import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import "./member-insight-comments-final.css";
+import { visibleReplyHeartRoots, counterpartHeartForReply } from "./insight-comment-reply-heart";
 
 const HISTORY="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-history";
 const EXTRAS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-extras";
@@ -117,6 +118,10 @@ async function enrich(rows:Row[],signal:AbortSignal):Promise<Row[]>{
 function stateOf(r:Row,filter:string){if(filter==="heart_closed"||(r.heart_on_last_external&&(r.status==="unreplied"||r.status==="followup_pending")))return{key:"heart_closed",label:"あなたの♡で終了"};if(r.status==="unreplied")return{key:"unreplied",label:"未返信"};if(r.status==="followup_pending")return{key:"followup_pending",label:"相手の返信で停止"};if(r.status==="replied")return{key:"replied",label:"自分の返信で終了"};return{key:String(r.status||""),label:String(r.status||"")}}
 function Avatar({row}:{row:Row}){return <CreatorAvatar person={row} name={String(row.actor_name||"noteユーザー")} className="micf-avatar"/>}
 function HeartState({row,heart}:{row:Row,heart?:Heart}){const s=stateOf(row,"all");if(s.key!=="replied")return null;const name=String(heart?.counterpartName||row.actor_name||"相手");if(heart?.exact&&heart.counterpartHearted===true)return <div className="micf-heart yes">♥ 最終返信に{name}さんの♡あり {heart.heartAt?<small>{date(heart.heartAt)}</small>:null}</div>;if(heart?.exact&&heart.counterpartHearted===false)return <div className="micf-heart no">♡ 最終返信に{name}さんの♡なし</div>;return <div className="micf-heart checking">↻ 最終返信の♡送信者を照合中</div>}
+function EventCounterpartHeart({row,heart}:{row:Row;heart?:Heart}){
+ const name=counterpartHeartForReply(row,heart);
+ return name?<small className="micf-event-heart counterpart">♥ 最終返信に{name}さんの♡あり</small>:null;
+}
 function Person({row}:{row:Row}){return <span className="micf-person"><Avatar row={row}/><span><b>{row.actor_name||"noteユーザー"}</b>{row.actor_url?<a href={row.actor_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}</span></span>}
 function EventPerson({row}:{row:Row}){if(row.is_creator)return <span className="micf-person mine"><Avatar row={row}/><span><b>あなた</b>{row.actor_url?<a href={row.actor_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}</span></span>;return <Person row={row}/>}
 function uniqueRows(rows:Row[],key="root_key"){const seen=new Set<string>(),out:Row[]=[];for(const r of rows){const k=String(r[key]||"");if(!k||seen.has(k))continue;seen.add(k);out.push(r)}return out}
@@ -397,6 +402,31 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  },[rows.length,status,query,renderLimit,loading,loadedPage,savedDisplay]);
  const eventRows=useMemo(()=>{if(status!=="all")return rows;const q=query.trim().toLowerCase();if(!q)return rows;return rows.filter(r=>[r.actor_name,r.actor_url,r.article_title,r.body].some(v=>String(v||"").toLowerCase().includes(q)))},[rows,status,query]);
  const visibleEventRows=useMemo(()=>eventRows.slice(0,renderLimit),[eventRows,renderLimit]);
+ const allHeartRead=useRef({seq:-1,roots:new Set<string>(),busy:false});
+ const [allHeartResults,setAllHeartResults]=useState<{seq:number;byRoot:Record<string,Heart>}>({seq:-1,byRoot:{}});
+ useEffect(()=>{
+  const controller=activeRequest.current;
+  if(status!=="all"||!controlsReady||savedDisplay||loading||!token||!controller||controller.signal.aborted||error)return;
+  const seq=loadSeq.current,request={seq,token,signal:controller.signal};
+  if(allHeartRead.current.seq!==seq)allHeartRead.current={seq,roots:new Set(),busy:false};
+  const read=allHeartRead.current;
+  if(read.busy)return;
+  const roots=visibleReplyHeartRoots(visibleEventRows,read.roots).slice(0,80);
+  if(!roots.length)return;
+  read.busy=true;
+  roots.forEach(key=>read.roots.add(key));
+  void post(HEARTS,{action:"batch",rootKeys:roots},request).then(h=>{
+   read.busy=false;
+   if(!current(request))return;
+   const map:Record<string,Heart>={};
+   for(const item of h.rows)if(item&&roots.includes(String(item.rootKey)))map[String(item.rootKey)]=item;
+   setAllHeartResults(previous=>current(request)?{seq,byRoot:{...(previous.seq===seq?previous.byRoot:{}),...map}}:previous);
+  }).catch(()=>{
+   read.busy=false;
+   // Keep the list readable, and leave the reaction unconfirmed until the next history refresh.
+   if(current(request))setAllHeartResults(previous=>({seq,byRoot:previous.seq===seq?previous.byRoot:{}}));
+  });
+ },[status,controlsReady,savedDisplay,loading,token,error,visibleEventRows,allHeartResults]);
  const visibleThreadRows=useMemo(()=>rows.slice(0,renderLimit),[rows,renderLimit]);
  const complete=!loading&&!error&&!savedDisplay&&rows.length>=total,shownTotal=status==="all"&&query.trim()?eventRows.length:total;
  const visibleCount=status==="all"?visibleEventRows.length:visibleThreadRows.length;
@@ -405,7 +435,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const retrySeconds=Math.max(0,Math.ceil((collectionRetryAt-collectionNow)/1000)),selectedArticle=articles.find(a=>String(a.article_key)===articleKey);
  if(!controlsReady)return <section className="micf"><h2>コメント・返信履歴</h2><p className="micf-empty">コメント履歴を確認中…</p></section>;
  return <section className="micf" aria-busy={syncPhase==="initial"&&loading}>
-  <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存先のコメント・返信を1件ずつ表示します。続きは必要な分だけ読み込みます。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{status==="all"&&query.trim()&&!complete?<small>検索中（暫定）</small>:null}{n(shownTotal)}件</strong></header>
+  <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存先のコメント・返信を1件ずつ表示します。続きは必要な分だけ読み込みます。相手本人の♡が確認できた場合は、最後の返信の行に表示します。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{status==="all"&&query.trim()&&!complete?<small>検索中（暫定）</small>:null}{n(shownTotal)}件</strong></header>
   {savedDisplay?<div className="micf-load-state" role="status"><b>{error?"前回保存分を表示・最新未確認":"前回保存分を表示・最新確認中"}</b><span>保存 {date(new Date(savedDisplay).toISOString())}</span></div>:null}
   {syncPhase!=="idle"?<div className={`micf-sync-scene ${syncPhase}`}><div className="micf-sync-track"><i/><i/><i/><i/></div><b>{syncMessage}</b><span>{syncPhase==="initial"?`読み込み済み ${n(rows.length)}件`:"保存済み表示はそのまま"}</span></div>:<div className={`micf-load-state micf-history-counts${previousCount?"":" done"}`} role="status" aria-live="polite"><div className="micf-storage-count"><b>{countLabel}</b><strong>{knownCount?`${n(total)}件`:"—"}</strong></div><div className="micf-display-counts"><span className="micf-loaded-count">読み込み済み <b>{n(rows.length)}件</b></span><span className="micf-visible-count">表示中 <b>{n(visibleCount)}件</b></span></div>{rows.length<total&&!savedDisplay?<small>下へ進むと続きを読み込みます。</small>:null}</div>}
   <div className="micf-tabs">{[["all","すべて（全コメント）"],["pending","要対応"],["unreplied","未返信"],["followup_pending","相手返信"],["heart_closed","あなたの♡で終了"],["replied","自分返信"]].map(x=><button key={x[0]} className={status===x[0]?"active":""} onClick={()=>setStatus(x[0])}>{x[1]}</button>)}</div>
@@ -413,7 +443,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   {selectedArticle?<p className="micf-selected-article">選択中：{selectedArticle.title}</p>:null}
   {collectionMessage?<div className={`micf-load-state${collectionFailures.length&&collectionFailures.every(unavailableArticle)?" unavailable":""}`} role="status" aria-live="polite"><b>{collectionMessage}</b></div>:null}
   {collectionFailures.length?<div className="micf-recovery"><details><summary>確認できなかった記事（{n(collectionFailures.length)}件）</summary><ul>{collectionFailures.map(f=><li key={f.articleKey}><b>{f.title}</b><p>{articleFailureReason(f)}</p>{f.url?<a href={f.url} target="_blank" rel="noreferrer">noteで記事を確認 ↗</a>:null}</li>)}</ul></details><button type="button" disabled={collecting||retrySeconds>0} onClick={()=>void collectComments(null,true,collectionFailures.slice(0,6).map(f=>f.articleKey))}>{collecting?"noteから取得中…":retrySeconds?`再取得まで ${retrySeconds}秒`:collectionFailures.length>6?"失敗分だけ再取得（先頭6記事）":"失敗分だけ再取得"}</button></div>:null}
-  {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length&&!savedDisplay?<p className="micf-empty">コメント履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}</article>})}</div>{visibleEventRows.length<eventRows.length||(!query.trim()&&rows.length<total)?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(query.trim()?eventRows.length:total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">{query.trim()&&!complete?(loading?"全履歴を検索中…":"全履歴の検索を完了できませんでした"):"この条件のコメント履歴はありません。"}</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length||rows.length<total?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
+  {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length&&!savedDisplay?<p className="micf-empty">コメント履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}<EventCounterpartHeart row={r} heart={allHeartResults.seq===loadSeq.current?allHeartResults.byRoot[String(r.parent_key||"")]:undefined}/></article>})}</div>{visibleEventRows.length<eventRows.length||(!query.trim()&&rows.length<total)?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(query.trim()?eventRows.length:total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">{query.trim()&&!complete?(loading?"全履歴を検索中…":"全履歴の検索を完了できませんでした"):"この条件のコメント履歴はありません。"}</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length||rows.length<total?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
  </section>
 }
 
