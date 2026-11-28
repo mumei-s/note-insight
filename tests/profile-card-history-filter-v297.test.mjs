@@ -14,13 +14,15 @@ const filter={fromDate:'2026-11-09',toDate:'2026-11-09',articleKey:'',timezone:'
 const plain=value=>JSON.parse(JSON.stringify(value));
 
 function editor(){
- const dom=new JSDOM('<section id="mumei-profile-card-paster-v1"><div class="body"><select data-mode><option value="number">number</option><option value="all">all</option></select><input data-count value="200"><details data-like300><div class="special-actions"></div></details></div></section>',{url:'https://editor.note.com/notes/n123456789abc/edit',runScripts:'outside-only'});
+ const dom=new JSDOM('<section id="mumei-profile-card-paster-v1"><div class="body"><select data-mode><option value="number">number</option><option value="all">all</option></select><input data-count value="200"><button class="on" data-choice="latest"></button><details data-like300><div class="special-actions"></div></details></div></section>',{url:'https://editor.note.com/notes/n123456789abc/edit',runScripts:'outside-only'});
  const w=dom.window,panel=w.document.querySelector('section'),detail=w.document.querySelector('details');
  const start=distribution.indexOf("const HISTORY_FILTER_PREF="),end=distribution.indexOf('function mediaUrl(',start);
  const identityStart=distribution.lastIndexOf('function summaryIdentity(',start);
  const identityEnd=distribution.indexOf('function summaryMismatch(',identityStart);
  assert.ok(identityStart>=0&&identityEnd>identityStart&&identityEnd<start);
- let code=distribution.slice(identityStart,identityEnd)+distribution.slice(start,end);
+ const choiceStart=distribution.lastIndexOf("function historyChoiceValid(",start),choiceEnd=distribution.indexOf("function historyAssertSelection(",choiceStart);
+ assert.ok(choiceStart>=0&&choiceEnd>choiceStart&&choiceEnd<start);
+ let code=distribution.slice(identityStart,identityEnd)+distribution.slice(choiceStart,choiceEnd)+distribution.slice(start,end);
  code=code.slice(0,code.indexOf("window.addEventListener('message'"));
  w.unsafeWindow=w;w.Date=class extends Date{static now(){return Date.parse('2026-11-08T15:00:01Z')}};
  w.eval(`const PANEL='mumei-profile-card-paster-v1',HISTORY_CANDIDATE_CAP=1500;let exportWaiter=null;const notifyFixedState=()=>{},setStatus=()=>{};function bindPanelAction(button,key,fn){button.addEventListener(key.split(':')[0],fn)};${code};window.api={historyToday,selectedHistoryFilter,historyOptions,checkpointHistoryOptions,historyFilterContains,patchHistoryFilterPanel,prepareLikesHistoryExport};`);
@@ -58,8 +60,8 @@ test('filter controls survive repeated patching without losing typing and saved 
   r.field('period').value='date';r.field('from').value='2026-10-12';r.field('from').dispatchEvent(new r.w.Event('input',{bubbles:true}));
   const input=r.field('from');r.api.patchHistoryFilterPanel(r.panel,r.detail);assert.equal(r.field('from'),input);
   assert.equal(JSON.parse(r.w.localStorage.getItem('mumei_profile_card_history_filter_v297')).fromDate,'2026-10-12');
-  const saved=r.api.historyOptions({likesHistory:true,mode:'all',count:116,historyFilter:filter});assert.deepEqual(plain(saved.historyFilter),filter);
-  assert.deepEqual(plain(r.api.checkpointHistoryOptions({historyFilter:filter}).historyFilter),filter);
+  const saved=r.api.historyOptions({likesHistory:true,mode:'all',count:116,historyFilter:filter,choice:'latest'});assert.deepEqual(plain(saved.historyFilter),filter);
+  assert.deepEqual(plain(r.api.checkpointHistoryOptions({historyFilter:filter,choice:'latest'}).historyFilter),filter);
   r.detail.querySelector('[data-history-filter]').remove();r.api.patchHistoryFilterPanel(r.panel,r.detail);assert.equal(r.field('from').value,'2026-10-12');
  }finally{r.dom.window.close()}
 });
