@@ -1,0 +1,10 @@
+{
+  "name": "note-review-worker",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "node build.mjs build",
+    "test": "node --test .worker/*.test.mjs"
+  }
+}
